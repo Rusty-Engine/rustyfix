@@ -158,12 +158,6 @@ impl Decoder {
             EncodingRule::DER => der_decode::<FixMessage>(data)
                 .map_err(|e| Error::Decode(DecodeError::Internal(e.to_string()))),
 
-            EncodingRule::PER | EncodingRule::APER | EncodingRule::UPER => {
-                // PER not available in this version, use DER as fallback
-                der_decode::<FixMessage>(data)
-                    .map_err(|e| Error::Decode(DecodeError::Internal(e.to_string())))
-            }
-
             EncodingRule::OER => oer_decode::<FixMessage>(data)
                 .map_err(|e| Error::Decode(DecodeError::Internal(e.to_string()))),
         }

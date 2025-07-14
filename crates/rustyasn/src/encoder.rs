@@ -159,19 +159,6 @@ impl Encoder {
                 der_encode(message).map_err(|e| Error::Encode(EncodeError::Internal(e.to_string())))
             }
 
-            EncodingRule::PER | EncodingRule::APER | EncodingRule::UPER => {
-                // PER encoding is not supported in this version of rasn
-                Err(Error::Encode(EncodeError::UnsupportedEncodingRule {
-                    rule: match rule {
-                        EncodingRule::PER => "PER",
-                        EncodingRule::APER => "APER",
-                        EncodingRule::UPER => "UPER",
-                        _ => "Unknown PER variant",
-                    },
-                    msg_type: message.msg_type.clone().into(),
-                }))
-            }
-
             EncodingRule::OER => {
                 oer_encode(message).map_err(|e| Error::Encode(EncodeError::Internal(e.to_string())))
             }

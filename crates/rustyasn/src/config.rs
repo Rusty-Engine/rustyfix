@@ -15,12 +15,6 @@ pub enum EncodingRule {
     BER,
     /// Distinguished Encoding Rules - Canonical subset of BER
     DER,
-    /// Packed Encoding Rules - Compact, bit-oriented format
-    PER,
-    /// Aligned Packed Encoding Rules - PER with alignment
-    APER,
-    /// Unaligned Packed Encoding Rules - PER without alignment
-    UPER,
     /// Octet Encoding Rules - Byte-aligned, efficient format
     OER,
 }
@@ -32,9 +26,6 @@ impl EncodingRule {
         match self {
             Self::BER => "BER",
             Self::DER => "DER",
-            Self::PER => "PER",
-            Self::APER => "APER",
-            Self::UPER => "UPER",
             Self::OER => "OER",
         }
     }
@@ -48,7 +39,7 @@ impl EncodingRule {
     /// Returns whether the encoding requires strict schema adherence.
     #[must_use]
     pub const fn requires_schema(&self) -> bool {
-        matches!(self, Self::PER | Self::APER | Self::UPER | Self::OER)
+        matches!(self, Self::OER)
     }
 }
 
@@ -130,7 +121,7 @@ impl Config {
     #[must_use]
     pub fn low_latency() -> Self {
         Self {
-            encoding_rule: EncodingRule::PER, // Most compact
+            encoding_rule: EncodingRule::OER, // Most compact of supported rules
             max_message_size: 16 * 1024,      // Smaller for faster processing
             validate_checksums: false,        // Skip validation for speed
             strict_type_checking: false,      // Relax checking
@@ -172,16 +163,16 @@ mod tests {
     fn test_encoding_rule_properties() {
         assert!(EncodingRule::BER.is_self_describing());
         assert!(EncodingRule::DER.is_self_describing());
-        assert!(!EncodingRule::PER.is_self_describing());
+        assert!(!EncodingRule::OER.is_self_describing());
 
-        assert!(EncodingRule::PER.requires_schema());
+        assert!(EncodingRule::OER.requires_schema());
         assert!(!EncodingRule::BER.requires_schema());
     }
 
     #[test]
     fn test_config_presets() {
         let low_latency = Config::low_latency();
-        assert_eq!(low_latency.encoding_rule, EncodingRule::PER);
+        assert_eq!(low_latency.encoding_rule, EncodingRule::OER);
         assert!(!low_latency.validate_checksums);
 
         let high_reliability = Config::high_reliability();

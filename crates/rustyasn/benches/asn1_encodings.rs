@@ -1,8 +1,9 @@
 //! Benchmarks for ASN.1 encoding performance.
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rustyasn::{Config, Decoder, Encoder, EncodingRule};
 use rustyfix::Dictionary;
+use std::hint::black_box;
 use std::sync::Arc;
 
 fn create_test_message(encoder: &Encoder, seq_num: u64) -> Vec<u8> {
@@ -24,7 +25,8 @@ fn create_test_message(encoder: &Encoder, seq_num: u64) -> Vec<u8> {
 }
 
 fn benchmark_encoding(c: &mut Criterion) {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict =
+        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
     let mut group = c.benchmark_group("encoding");
 
     let encoding_rules = [
@@ -51,7 +53,8 @@ fn benchmark_encoding(c: &mut Criterion) {
 }
 
 fn benchmark_decoding(c: &mut Criterion) {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict =
+        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
     let mut group = c.benchmark_group("decoding");
 
     let encoding_rules = [
@@ -90,7 +93,8 @@ fn benchmark_decoding(c: &mut Criterion) {
 }
 
 fn benchmark_streaming_decoder(c: &mut Criterion) {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict =
+        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
     let mut group = c.benchmark_group("streaming_decoder");
 
     let config = Config::new(EncodingRule::DER);
@@ -121,7 +125,8 @@ fn benchmark_streaming_decoder(c: &mut Criterion) {
 }
 
 fn benchmark_message_sizes(c: &mut Criterion) {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict =
+        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
     let group = c.benchmark_group("message_sizes");
 
     // Compare encoded sizes
@@ -143,7 +148,8 @@ fn benchmark_message_sizes(c: &mut Criterion) {
 }
 
 fn benchmark_config_profiles(c: &mut Criterion) {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict =
+        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
     let mut group = c.benchmark_group("config_profiles");
 
     let configs = [

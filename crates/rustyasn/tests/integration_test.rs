@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 #[test]
 fn test_basic_encoding_decoding() {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
 
     // Test each encoding rule
     let encoding_rules = [EncodingRule::BER, EncodingRule::DER, EncodingRule::OER];
@@ -46,7 +46,7 @@ fn test_basic_encoding_decoding() {
 
 #[test]
 fn test_streaming_decoder() {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
     let config = Config::new(EncodingRule::DER);
     let encoder = Encoder::new(config.clone(), dict.clone());
     let mut decoder = rustyasn::DecoderStreaming::new(config, dict.clone());
@@ -99,7 +99,7 @@ fn test_streaming_decoder() {
 
 #[test]
 fn test_message_size_limits() {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
     let mut config = Config::new(EncodingRule::BER);
     config.max_message_size = 100; // Very small limit
 
@@ -120,7 +120,7 @@ fn test_message_size_limits() {
 
 #[test]
 fn test_field_types() {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
     let config = Config::new(EncodingRule::DER);
     let encoder = Encoder::new(config.clone(), dict.clone());
     let decoder = Decoder::new(config, dict.clone());
@@ -148,11 +148,11 @@ fn test_field_types() {
 
 #[test]
 fn test_encoding_rule_performance_profiles() {
-    let dict = Arc::new(Dictionary::fix44().unwrap());
+    let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
 
-    // Low latency configuration should use PER
+    // Low latency configuration should use OER
     let low_latency = Config::low_latency();
-    assert_eq!(low_latency.encoding_rule, EncodingRule::PER);
+    assert_eq!(low_latency.encoding_rule, EncodingRule::OER);
     assert!(!low_latency.validate_checksums);
 
     // High reliability should use DER
