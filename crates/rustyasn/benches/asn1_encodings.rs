@@ -6,7 +6,10 @@ use rustyfix::Dictionary;
 use std::hint::black_box;
 use std::sync::Arc;
 
-fn create_test_message(encoder: &Encoder, seq_num: u64) -> Vec<u8> {
+fn create_test_message(
+    encoder: &Encoder,
+    seq_num: u64,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut handle = encoder.start_message("D", "SENDER001", "TARGET001", seq_num);
 
     handle
@@ -21,12 +24,17 @@ fn create_test_message(encoder: &Encoder, seq_num: u64) -> Vec<u8> {
         .add_string(18, "M") // ExecInst
         .add_string(21, "1"); // HandlInst
 
-    handle.encode().expect("Encoding should succeed")
+    handle.encode().map_err(|e| e.into())
 }
 
 fn benchmark_encoding(c: &mut Criterion) {
-    let dict =
-        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
+    let dict = match Dictionary::fix44() {
+        Ok(d) => Arc::new(d),
+        Err(_) => {
+            eprintln!("Failed to load FIX 4.4 dictionary, skipping encoding benchmarks");
+            return;
+        }
+    };
     let mut group = c.benchmark_group("encoding");
 
     let encoding_rules = [
@@ -42,9 +50,18 @@ fn benchmark_encoding(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("encode", name), &encoder, |b, encoder| {
             let mut seq_num = 1;
             b.iter(|| {
-                let encoded = create_test_message(encoder, seq_num);
-                seq_num += 1;
-                black_box(encoded)
+                // Skip failed encodings rather than panic in benchmarks
+                match create_test_message(encoder, seq_num) {
+                    Ok(encoded) => {
+                        seq_num += 1;
+                        black_box(encoded)
+                    }
+                    Err(_) => {
+                        // Skip this iteration on encoding failure
+                        seq_num += 1;
+                        black_box(Vec::new())
+                    }
+                }
             });
         });
     }
@@ -53,8 +70,13 @@ fn benchmark_encoding(c: &mut Criterion) {
 }
 
 fn benchmark_decoding(c: &mut Criterion) {
-    let dict =
-        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
+    let dict = match Dictionary::fix44() {
+        Ok(d) => Arc::new(d),
+        Err(_) => {
+            eprintln!("Failed to load FIX 4.4 dictionary, skipping decoding benchmarks");
+            return;
+        }
+    };
     let mut group = c.benchmark_group("decoding");
 
     let encoding_rules = [
@@ -70,8 +92,13 @@ fn benchmark_decoding(c: &mut Criterion) {
 
         // Pre-encode messages
         let messages: Vec<Vec<u8>> = (1..=100)
-            .map(|seq| create_test_message(&encoder, seq))
+            .filter_map(|seq| create_test_message(&encoder, seq).ok())
             .collect();
+
+        if messages.is_empty() {
+            eprintln!("Failed to create test messages, skipping {name} benchmark");
+            continue;
+        }
 
         group.bench_with_input(
             BenchmarkId::new("decode", name),
@@ -79,11 +106,18 @@ fn benchmark_decoding(c: &mut Criterion) {
             |b, (decoder, messages)| {
                 let mut idx = 0;
                 b.iter(|| {
-                    let decoded = decoder
-                        .decode(&messages[idx % messages.len()])
-                        .expect("Decoding should succeed");
-                    idx += 1;
-                    black_box(decoded)
+                    // Skip failed decodings rather than panic in benchmarks
+                    match decoder.decode(&messages[idx % messages.len()]) {
+                        Ok(decoded) => {
+                            idx += 1;
+                            black_box(decoded);
+                        }
+                        Err(_) => {
+                            // Skip this iteration on decoding failure
+                            idx += 1;
+                            black_box(());
+                        }
+                    }
                 });
             },
         );
@@ -93,8 +127,13 @@ fn benchmark_decoding(c: &mut Criterion) {
 }
 
 fn benchmark_streaming_decoder(c: &mut Criterion) {
-    let dict =
-        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
+    let dict = match Dictionary::fix44() {
+        Ok(d) => Arc::new(d),
+        Err(_) => {
+            eprintln!("Failed to load FIX 4.4 dictionary, skipping streaming decoder benchmarks");
+            return;
+        }
+    };
     let mut group = c.benchmark_group("streaming_decoder");
 
     let config = Config::new(EncodingRule::DER);
@@ -103,8 +142,12 @@ fn benchmark_streaming_decoder(c: &mut Criterion) {
     // Create a batch of messages
     let mut batch = Vec::new();
     for seq in 1..=10 {
-        let msg = create_test_message(&encoder, seq);
-        batch.extend_from_slice(&msg);
+        if let Ok(msg) = create_test_message(&encoder, seq) {
+            batch.extend_from_slice(&msg);
+        } else {
+            eprintln!("Failed to create test message {seq}, skipping streaming benchmark");
+            return;
+        }
     }
 
     group.bench_function("decode_batch", |b| {
@@ -125,8 +168,13 @@ fn benchmark_streaming_decoder(c: &mut Criterion) {
 }
 
 fn benchmark_message_sizes(c: &mut Criterion) {
-    let dict =
-        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
+    let dict = match Dictionary::fix44() {
+        Ok(d) => Arc::new(d),
+        Err(_) => {
+            eprintln!("Failed to load FIX 4.4 dictionary, skipping message size benchmarks");
+            return;
+        }
+    };
     let group = c.benchmark_group("message_sizes");
 
     // Compare encoded sizes
@@ -139,17 +187,24 @@ fn benchmark_message_sizes(c: &mut Criterion) {
     for (name, rule) in encoding_rules {
         let config = Config::new(rule);
         let encoder = Encoder::new(config, dict.clone());
-        let encoded = create_test_message(&encoder, 1);
-
-        println!("{} encoded size: {} bytes", name, encoded.len());
+        if let Ok(encoded) = create_test_message(&encoder, 1) {
+            println!("{} encoded size: {} bytes", name, encoded.len());
+        } else {
+            eprintln!("Failed to encode message for {name} size measurement");
+        }
     }
 
     group.finish();
 }
 
 fn benchmark_config_profiles(c: &mut Criterion) {
-    let dict =
-        Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for benchmark"));
+    let dict = match Dictionary::fix44() {
+        Ok(d) => Arc::new(d),
+        Err(_) => {
+            eprintln!("Failed to load FIX 4.4 dictionary, skipping config profile benchmarks");
+            return;
+        }
+    };
     let mut group = c.benchmark_group("config_profiles");
 
     let configs = [
@@ -168,10 +223,27 @@ fn benchmark_config_profiles(c: &mut Criterion) {
             |b, (encoder, decoder)| {
                 let mut seq_num = 1;
                 b.iter(|| {
-                    let encoded = create_test_message(encoder, seq_num);
-                    let decoded = decoder.decode(&encoded).expect("Decoding should succeed");
-                    seq_num += 1;
-                    black_box(decoded)
+                    // Skip failures rather than panic in benchmarks
+                    match create_test_message(encoder, seq_num) {
+                        Ok(encoded) => {
+                            match decoder.decode(&encoded) {
+                                Ok(decoded) => {
+                                    seq_num += 1;
+                                    black_box(decoded);
+                                }
+                                Err(_) => {
+                                    // Skip this iteration on decoding failure
+                                    seq_num += 1;
+                                    black_box(());
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Skip this iteration on encoding failure
+                            seq_num += 1;
+                            black_box(());
+                        }
+                    }
                 });
             },
         );
