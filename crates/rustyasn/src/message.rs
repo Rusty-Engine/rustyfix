@@ -73,8 +73,19 @@ impl Message {
             fix_msg.msg_seq_num,
         );
 
+        // Extract sending_time from fields (tag 52) if present
+        if let Some(sending_time_field) = fix_msg.fields.iter().find(|f| f.tag == 52) {
+            let sending_time = sending_time_field.value.to_string();
+            message.sending_time = Some(sending_time.clone());
+            message.set_field(52, sending_time.as_bytes().to_vec());
+        }
+
         // Add additional fields
         for field in &fix_msg.fields {
+            // Skip sending_time as it's already processed above
+            if field.tag == 52 {
+                continue;
+            }
             message.set_field(field.tag, field.value.as_bytes());
         }
 
@@ -404,6 +415,55 @@ mod tests {
             .get(54)
             .expect("Side field (54) should be present in converted message");
         assert_eq!(side.as_str(), "1");
+    }
+
+    #[test]
+    fn test_conversion_from_fix_message_with_sending_time() {
+        let fix_msg = FixMessage {
+            msg_type: "D".to_string(),
+            sender_comp_id: "SENDER".to_string(),
+            target_comp_id: "TARGET".to_string(),
+            msg_seq_num: 123,
+            fields: vec![
+                Field {
+                    tag: 52, // SendingTime
+                    value: crate::types::FixFieldValue::UtcTimestamp(
+                        "20240101-12:30:45".to_string(),
+                    ),
+                },
+                Field {
+                    tag: 55,
+                    value: crate::types::FixFieldValue::String("EUR/USD".to_string()),
+                },
+            ],
+        };
+
+        let message = Message::from_fix_message(&fix_msg)
+            .expect("Failed to convert valid FIX message with sending time to ASN.1 message");
+
+        // Check that sending_time is properly extracted
+        assert_eq!(message.sending_time, Some("20240101-12:30:45".to_string()));
+
+        // Check that sending_time is accessible via field map
+        let sending_time = message
+            .sending_time()
+            .expect("SendingTime field (52) should be accessible via helper method");
+        assert!(sending_time.is_some());
+        assert_eq!(
+            sending_time
+                .expect("SendingTime should be present")
+                .as_str(),
+            "20240101-12:30:45"
+        );
+
+        // Check that conversion to ASN.1 preserves sending_time
+        let asn1_message = message
+            .to_asn1_message()
+            .expect("Failed to convert message to ASN.1 format");
+        assert_eq!(
+            asn1_message.sending_time,
+            Some("20240101-12:30:45".to_string())
+        );
     }
 
     #[test]
