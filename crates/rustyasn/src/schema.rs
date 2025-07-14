@@ -341,16 +341,222 @@ impl Schema {
         self.field_types.get(&tag)
     }
 
-    /// Maps a FIX data type to the appropriate string value.
+    /// Maps a FIX data type to the appropriate typed value based on field type information.
+    /// Returns a string representation but validates and processes according to the field's FIX data type.
     pub fn map_field_type(&self, tag: u16, value: &[u8]) -> Result<String, crate::Error> {
-        let _field_info = self
+        let field_info = self
             .get_field_type(tag)
             .ok_or_else(|| crate::Error::Schema(format!("Unknown field tag: {tag}").into()))?;
 
-        // For simplified implementation, always convert to string
+        // Convert bytes to UTF-8 string first
         let s = std::str::from_utf8(value)
             .map_err(|_| crate::Error::Decode(crate::DecodeError::InvalidUtf8 { offset: 0 }))?;
-        Ok(s.to_string())
+
+        // Validate and process based on FIX data type
+        match field_info.fix_type {
+            FixDataType::Int => {
+                // Validate it's a valid integer
+                s.parse::<i64>().map_err(|_| {
+                    crate::Error::Schema(format!("Invalid integer value for tag {tag}: {s}").into())
+                })?;
+                Ok(s.to_string())
+            }
+            FixDataType::Length
+            | FixDataType::NumInGroup
+            | FixDataType::SeqNum
+            | FixDataType::TagNum
+            | FixDataType::DayOfMonth => {
+                // Validate it's a valid unsigned integer
+                s.parse::<u64>().map_err(|_| {
+                    crate::Error::Schema(
+                        format!("Invalid unsigned integer value for tag {tag}: {s}").into(),
+                    )
+                })?;
+                Ok(s.to_string())
+            }
+            FixDataType::Float
+            | FixDataType::Qty
+            | FixDataType::Price
+            | FixDataType::PriceOffset
+            | FixDataType::Amt
+            | FixDataType::Percentage => {
+                // Validate it's a valid decimal number
+                s.parse::<f64>().map_err(|_| {
+                    crate::Error::Schema(format!("Invalid decimal value for tag {tag}: {s}").into())
+                })?;
+                Ok(s.to_string())
+            }
+            FixDataType::Char => {
+                // Validate it's a single character
+                if s.len() != 1 {
+                    return Err(crate::Error::Schema(
+                        format!("Char field tag {tag} must be exactly 1 character, got: {s}")
+                            .into(),
+                    ));
+                }
+                Ok(s.to_string())
+            }
+            FixDataType::Boolean => {
+                // Validate it's Y or N
+                match s {
+                    "Y" | "N" => Ok(s.to_string()),
+                    _ => Err(crate::Error::Schema(
+                        format!("Boolean field tag {tag} must be Y or N, got: {s}").into(),
+                    )),
+                }
+            }
+            FixDataType::String
+            | FixDataType::MultipleValueString
+            | FixDataType::MultipleCharValue
+            | FixDataType::Currency
+            | FixDataType::Exchange
+            | FixDataType::Language
+            | FixDataType::Pattern
+            | FixDataType::Tenor => {
+                // String fields - no additional validation needed, just ensure UTF-8 (already done)
+                Ok(s.to_string())
+            }
+            FixDataType::UtcTimestamp => {
+                // Validate timestamp format (YYYYMMDD-HH:MM:SS or YYYYMMDD-HH:MM:SS.sss)
+                if !Self::is_valid_utc_timestamp(s) {
+                    return Err(crate::Error::Schema(
+                        format!("Invalid UTC timestamp format for tag {tag}: {s}").into(),
+                    ));
+                }
+                Ok(s.to_string())
+            }
+            FixDataType::UtcDateOnly => {
+                // Validate date format (YYYYMMDD)
+                if !Self::is_valid_utc_date(s) {
+                    return Err(crate::Error::Schema(
+                        format!("Invalid UTC date format for tag {tag}: {s}").into(),
+                    ));
+                }
+                Ok(s.to_string())
+            }
+            FixDataType::UtcTimeOnly => {
+                // Validate time format (HH:MM:SS or HH:MM:SS.sss)
+                if !Self::is_valid_utc_time(s) {
+                    return Err(crate::Error::Schema(
+                        format!("Invalid UTC time format for tag {tag}: {s}").into(),
+                    ));
+                }
+                Ok(s.to_string())
+            }
+            FixDataType::LocalMktDate => {
+                // Validate local market date format (YYYYMMDD)
+                if !Self::is_valid_utc_date(s) {
+                    return Err(crate::Error::Schema(
+                        format!("Invalid local market date format for tag {tag}: {s}").into(),
+                    ));
+                }
+                Ok(s.to_string())
+            }
+            FixDataType::TzTimeOnly | FixDataType::TzTimestamp => {
+                // For timezone-aware timestamps, accept as string but validate basic format
+                if s.trim().is_empty() {
+                    return Err(crate::Error::Schema(
+                        format!("Timezone timestamp/time for tag {tag} cannot be empty").into(),
+                    ));
+                }
+                Ok(s.to_string())
+            }
+            FixDataType::Data | FixDataType::XmlData => {
+                // Binary or XML data - return as-is (already validated as UTF-8)
+                Ok(s.to_string())
+            }
+        }
+    }
+
+    /// Validates UTC timestamp format (YYYYMMDD-HH:MM:SS or YYYYMMDD-HH:MM:SS.sss)
+    fn is_valid_utc_timestamp(s: &str) -> bool {
+        // Basic format check: YYYYMMDD-HH:MM:SS (17 chars) or YYYYMMDD-HH:MM:SS.sss (21 chars)
+        if s.len() != 17 && s.len() != 21 {
+            return false;
+        }
+
+        // Check date part (first 8 chars)
+        if !Self::is_valid_utc_date(&s[..8]) {
+            return false;
+        }
+
+        // Check separator
+        if s.chars().nth(8) != Some('-') {
+            return false;
+        }
+
+        // Check time part
+        Self::is_valid_utc_time(&s[9..])
+    }
+
+    /// Validates UTC date format (YYYYMMDD)
+    fn is_valid_utc_date(s: &str) -> bool {
+        if s.len() != 8 {
+            return false;
+        }
+
+        // All characters must be digits
+        if !s.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+
+        // Basic range validation
+        let year: u32 = s[..4].parse().unwrap_or(0);
+        let month: u32 = s[4..6].parse().unwrap_or(0);
+        let day: u32 = s[6..8].parse().unwrap_or(0);
+
+        (1900..=2099).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day)
+    }
+
+    /// Validates UTC time format (HH:MM:SS or HH:MM:SS.sss)
+    fn is_valid_utc_time(s: &str) -> bool {
+        // Format: HH:MM:SS (8 chars) or HH:MM:SS.sss (12 chars)
+        if s.len() != 8 && s.len() != 12 {
+            return false;
+        }
+
+        // Check HH:MM:SS part
+        if s.len() >= 8 {
+            let time_part = &s[..8];
+
+            // Format: HH:MM:SS
+            if time_part.len() != 8
+                || time_part.chars().nth(2) != Some(':')
+                || time_part.chars().nth(5) != Some(':')
+            {
+                return false;
+            }
+
+            // Extract and validate time components
+            let hour_str = &time_part[..2];
+            let min_str = &time_part[3..5];
+            let sec_str = &time_part[6..8];
+
+            if let (Ok(hour), Ok(min), Ok(sec)) = (
+                hour_str.parse::<u32>(),
+                min_str.parse::<u32>(),
+                sec_str.parse::<u32>(),
+            ) {
+                if hour >= 24 || min >= 60 || sec >= 60 {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Check milliseconds part if present
+        if s.len() == 12 {
+            if s.chars().nth(8) != Some('.') {
+                return false;
+            }
+            let ms_str = &s[9..];
+            if ms_str.len() != 3 || !ms_str.chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -402,7 +608,95 @@ mod tests {
 
         let result = schema
             .map_field_type(1000, b"N")
-            .expect("Field mapping should not fail in test");
+            .expect("Boolean N should be valid");
         assert_eq!(result, "N");
+
+        // Test invalid boolean
+        let result = schema.map_field_type(1000, b"X");
+        assert!(result.is_err(), "Invalid boolean should fail");
+
+        // Test integer mapping
+        schema.field_types.insert(
+            1001,
+            FieldTypeInfo {
+                fix_type: FixDataType::Int,
+                in_header: false,
+                in_trailer: false,
+            },
+        );
+
+        let result = schema
+            .map_field_type(1001, b"123")
+            .expect("Valid integer should pass");
+        assert_eq!(result, "123");
+
+        let result = schema.map_field_type(1001, b"abc");
+        assert!(result.is_err(), "Invalid integer should fail");
+
+        // Test float mapping
+        schema.field_types.insert(
+            1002,
+            FieldTypeInfo {
+                fix_type: FixDataType::Price,
+                in_header: false,
+                in_trailer: false,
+            },
+        );
+
+        let result = schema
+            .map_field_type(1002, b"123.45")
+            .expect("Valid price should pass");
+        assert_eq!(result, "123.45");
+
+        let result = schema.map_field_type(1002, b"invalid");
+        assert!(result.is_err(), "Invalid price should fail");
+
+        // Test character mapping
+        schema.field_types.insert(
+            1003,
+            FieldTypeInfo {
+                fix_type: FixDataType::Char,
+                in_header: false,
+                in_trailer: false,
+            },
+        );
+
+        let result = schema
+            .map_field_type(1003, b"A")
+            .expect("Single character should pass");
+        assert_eq!(result, "A");
+
+        let result = schema.map_field_type(1003, b"AB");
+        assert!(result.is_err(), "Multiple characters should fail");
+    }
+
+    #[test]
+    fn test_date_time_validation() {
+        // Test valid UTC timestamp
+        assert!(Schema::is_valid_utc_timestamp("20240101-12:30:45"));
+        assert!(Schema::is_valid_utc_timestamp("20240101-12:30:45.123"));
+
+        // Test invalid UTC timestamp
+        assert!(!Schema::is_valid_utc_timestamp("2024-01-01 12:30:45"));
+        assert!(!Schema::is_valid_utc_timestamp("20240101-25:30:45"));
+        assert!(!Schema::is_valid_utc_timestamp("20240101-12:70:45"));
+
+        // Test valid UTC date
+        assert!(Schema::is_valid_utc_date("20240101"));
+        assert!(Schema::is_valid_utc_date("20241231"));
+
+        // Test invalid UTC date
+        assert!(!Schema::is_valid_utc_date("2024-01-01"));
+        assert!(!Schema::is_valid_utc_date("20241301")); // Invalid month
+        assert!(!Schema::is_valid_utc_date("20240132")); // Invalid day
+
+        // Test valid UTC time
+        assert!(Schema::is_valid_utc_time("12:30:45"));
+        assert!(Schema::is_valid_utc_time("12:30:45.123"));
+
+        // Test invalid UTC time
+        assert!(!Schema::is_valid_utc_time("25:30:45"));
+        assert!(!Schema::is_valid_utc_time("12:70:45"));
+        assert!(!Schema::is_valid_utc_time("12:30:70"));
     }
 }
