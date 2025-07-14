@@ -7,6 +7,19 @@ use smartstring::{LazyCompact, SmartString};
 type FixString = SmartString<LazyCompact>;
 use std::sync::Arc;
 
+// Default configuration constants
+/// Default maximum message size in bytes (64KB)
+pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 64 * 1024;
+
+/// Default maximum recursion depth for nested structures
+pub const DEFAULT_MAX_RECURSION_DEPTH: u32 = 32;
+
+/// Default buffer size for streaming operations (8KB)
+pub const DEFAULT_STREAM_BUFFER_SIZE: usize = 8 * 1024;
+
+/// Low latency configuration maximum message size (16KB)
+pub const LOW_LATENCY_MAX_MESSAGE_SIZE: usize = 16 * 1024;
+
 /// Encoding rule to use for ASN.1 operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -96,11 +109,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             encoding_rule: EncodingRule::default(),
-            max_message_size: 64 * 1024, // 64KB
-            max_recursion_depth: 32,
+            max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
+            max_recursion_depth: DEFAULT_MAX_RECURSION_DEPTH,
             validate_checksums: true,
             strict_type_checking: true,
-            stream_buffer_size: 8 * 1024, // 8KB
+            stream_buffer_size: DEFAULT_STREAM_BUFFER_SIZE,
             enable_zero_copy: true,
             message_options: Arc::new(RwLock::new(FxHashMap::default())),
         }
@@ -122,7 +135,7 @@ impl Config {
     pub fn low_latency() -> Self {
         Self {
             encoding_rule: EncodingRule::OER, // Most compact of supported rules
-            max_message_size: 16 * 1024,      // Smaller for faster processing
+            max_message_size: LOW_LATENCY_MAX_MESSAGE_SIZE, // Smaller for faster processing
             validate_checksums: false,        // Skip validation for speed
             strict_type_checking: false,      // Relax checking
             enable_zero_copy: true,           // Always enable

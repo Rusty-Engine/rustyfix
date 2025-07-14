@@ -63,6 +63,7 @@
 #![warn(clippy::all, clippy::pedantic, rust_2024_compatibility)]
 #![allow(clippy::module_name_repetitions, clippy::must_use_candidate)]
 
+pub mod buffers;
 pub mod config;
 pub mod decoder;
 pub mod encoder;
@@ -91,3 +92,16 @@ pub use rasn::{AsnType, Decode, Encode};
 
 /// Version information for the ASN.1 encoding implementation
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// Const generic buffer sizes for optimal performance
+/// Default buffer size for field serialization (64 bytes)
+pub const FIELD_BUFFER_SIZE: usize = 64;
+
+/// Size for small field collections (8 fields)
+pub const SMALL_FIELD_COLLECTION_SIZE: usize = 8;
+
+/// Size for medium field collections (16 fields)
+pub const MEDIUM_FIELD_COLLECTION_SIZE: usize = 16;
+
+/// Maximum number of standard header fields
+pub const MAX_HEADER_FIELDS: usize = 8;

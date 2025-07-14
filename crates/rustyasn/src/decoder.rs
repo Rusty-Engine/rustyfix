@@ -13,11 +13,15 @@ use rustyfix::{Dictionary, GetConfig, StreamingDecoder as StreamingDecoderTrait}
 use std::sync::Arc;
 
 // ASN.1 tag constants
-const ASN1_SEQUENCE_TAG: u8 = 0x30;
-const ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK: u8 = 0xE0;
-const ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG: u8 = 0xA0;
+/// ASN.1 SEQUENCE tag value (0x30)
+pub const ASN1_SEQUENCE_TAG: u8 = 0x30;
+/// ASN.1 context-specific constructed mask (0xE0)
+pub const ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK: u8 = 0xE0;
+/// ASN.1 context-specific constructed tag base value (0xA0)
+pub const ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG: u8 = 0xA0;
+/// Long form length indicator for 2-byte length (used in tests)
 #[cfg(test)]
-const ASN1_LONG_FORM_LENGTH_2_BYTES: u8 = 0x82; // Long form length indicator for 2-byte length
+pub const ASN1_LONG_FORM_LENGTH_2_BYTES: u8 = 0x82;
 
 /// Decoded FIX message representation.
 #[derive(Debug, Clone)]

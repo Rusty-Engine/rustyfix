@@ -8,6 +8,7 @@ use crate::{
 };
 use bytes::BytesMut;
 use rasn::{ber::encode as ber_encode, der::encode as der_encode, oer::encode as oer_encode};
+use rustc_hash::FxHashSet;
 use rustyfix::{Dictionary, FieldMap, FieldType, GetConfig, SetField};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
@@ -17,19 +18,19 @@ use std::sync::Arc;
 
 // Size estimation constants for performance and maintainability
 /// Base overhead for ASN.1 message structure including message sequence number encoding
-const BASE_ASN1_OVERHEAD: usize = 20;
+pub const BASE_ASN1_OVERHEAD: usize = 20;
 
 /// Conservative estimate for ASN.1 tag encoding size (handles up to 5-digit tag numbers)
-const TAG_ENCODING_SIZE: usize = 5;
+pub const TAG_ENCODING_SIZE: usize = 5;
 
 /// Size estimate for integer field values (i64/u64 can be up to 8 bytes when encoded)
-const INTEGER_ESTIMATE_SIZE: usize = 8;
+pub const INTEGER_ESTIMATE_SIZE: usize = 8;
 
 /// Size for boolean field values (single byte: Y or N)
-const BOOLEAN_SIZE: usize = 1;
+pub const BOOLEAN_SIZE: usize = 1;
 
 /// ASN.1 TLV (Tag-Length-Value) encoding overhead per field
-const FIELD_TLV_OVERHEAD: usize = 5;
+pub const FIELD_TLV_OVERHEAD: usize = 5;
 
 /// ASN.1 encoder for FIX messages.
 pub struct Encoder {
@@ -149,28 +150,102 @@ impl Encoder {
 
     /// Adds all non-header fields to the message.
     ///
-    /// This method iterates through all fields defined in the FIX dictionary
-    /// and checks if they are present in the message. This ensures no data loss
-    /// compared to the previous hardcoded approach.
+    /// This method uses an optimized approach that prioritizes common fields
+    /// and intelligently iterates through dictionary fields.
     fn add_message_fields<F: FieldMap<u32>>(
         &self,
         handle: &mut EncoderHandle,
         msg: &F,
     ) -> Result<()> {
-        // Get all field definitions from the schema's dictionary
+        // Get the dictionary for field validation
         let dictionary = self.schema.dictionary();
-        let all_fields = dictionary.fields();
 
-        // Process each field defined in the dictionary
-        for field in all_fields {
-            let tag = field.tag().get();
+        // Common fields that appear in many message types (ordered by frequency)
+        // This significantly improves performance for typical messages
+        const COMMON_FIELD_TAGS: &[u32] = &[
+            // Market data fields
+            55, // Symbol
+            54, // Side
+            38, // OrderQty
+            44, // Price
+            40, // OrdType
+            59, // TimeInForce
+            // Order/execution fields
+            11,  // ClOrdID
+            37,  // OrderID
+            17,  // ExecID
+            150, // ExecType
+            39,  // OrdStatus
+            // Additional common fields
+            1,   // Account
+            6,   // AvgPx
+            14,  // CumQty
+            32,  // LastQty
+            31,  // LastPx
+            151, // LeavesQty
+            60,  // TransactTime
+            109, // ClientID
+            // Reference fields
+            58,  // Text
+            354, // EncodedTextLen
+            355, // EncodedText
+        ];
 
-            // Skip standard header fields that are already handled by start_message
+        // Track which tags we've already processed
+        let mut processed_tags = FxHashSet::default();
+
+        // First pass: Check common fields (O(1) for each)
+        for &tag in COMMON_FIELD_TAGS {
             if self.is_standard_header_field(tag) {
                 continue;
             }
 
-            // Check if this field is present in the message
+            if let Some(raw_data) = msg.get_raw(tag) {
+                let value_str = String::from_utf8_lossy(raw_data);
+                handle.add_field(tag, value_str.to_string());
+                processed_tags.insert(tag);
+            }
+        }
+
+        // Second pass: Check message-type specific fields if available
+        if let Some(msg_type_def) = dictionary
+            .messages()
+            .iter()
+            .find(|m| m.msg_type() == handle.message.msg_type)
+        {
+            // Get fields specific to this message type by iterating through its layout
+            for layout_item in msg_type_def.layout() {
+                match layout_item.kind() {
+                    rustyfix_dictionary::LayoutItemKind::Field(field) => {
+                        let tag = field.tag().get();
+
+                        if processed_tags.contains(&tag) || self.is_standard_header_field(tag) {
+                            continue;
+                        }
+
+                        if let Some(raw_data) = msg.get_raw(tag) {
+                            let value_str = String::from_utf8_lossy(raw_data);
+                            handle.add_field(tag, value_str.to_string());
+                            processed_tags.insert(tag);
+                        }
+                    }
+                    // We could also handle groups and components here if needed
+                    _ => {}
+                }
+            }
+        }
+
+        // Third pass: For completeness, check remaining dictionary fields
+        // This ensures we don't miss any fields that might be present
+        // but weren't in our common fields or message-specific fields
+        for field in dictionary.fields() {
+            let tag = field.tag().get();
+
+            // Skip if already processed or is a header field
+            if processed_tags.contains(&tag) || self.is_standard_header_field(tag) {
+                continue;
+            }
+
             if let Some(raw_data) = msg.get_raw(tag) {
                 let value_str = String::from_utf8_lossy(raw_data);
                 handle.add_field(tag, value_str.to_string());
@@ -220,7 +295,7 @@ impl SetField<u32> for EncoderHandle<'_> {
         V: FieldType<'b>,
     {
         // Serialize the value to bytes using a temporary buffer that implements Buffer
-        let mut temp_buffer: SmallVec<[u8; 64]> = SmallVec::new();
+        let mut temp_buffer: SmallVec<[u8; crate::FIELD_BUFFER_SIZE]> = SmallVec::new();
         value.serialize_with(&mut temp_buffer, _settings);
 
         // Convert to string for FIX compatibility

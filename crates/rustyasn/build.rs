@@ -125,16 +125,19 @@ fn generate_fix_asn1_definitions(enabled_features: &[String]) -> Result<()> {
         let filename = format!("{feature}_asn1.rs");
 
         // Dynamically call the appropriate dictionary method
+        // Note: Only fix40, fix44, and fix50 are currently available in rustyfix-dictionary
         let dict_result = match feature.as_str() {
             "fix40" => Dictionary::fix40(),
-            "fix41" => Dictionary::fix41(),
-            "fix42" => Dictionary::fix42(),
-            "fix43" => Dictionary::fix43(),
             "fix44" => Dictionary::fix44(),
             "fix50" => Dictionary::fix50(),
-            "fix50sp1" => Dictionary::fix50sp1(),
-            "fix50sp2" => Dictionary::fix50sp2(),
-            "fixt11" => Dictionary::fixt11(),
+            // The following versions are not yet implemented in rustyfix-dictionary
+            "fix41" | "fix42" | "fix43" | "fix50sp1" | "fix50sp2" | "fixt11" => {
+                println!(
+                    "cargo:warning=Skipping {} (not yet implemented in rustyfix-dictionary)",
+                    feature.to_uppercase()
+                );
+                continue;
+            }
             _ => {
                 println!(
                     "cargo:warning=Skipping unknown FIX feature: {feature} (no corresponding dictionary method)"
@@ -1101,7 +1104,7 @@ fn generate_rust_type(asn1_type: &Asn1Type) -> Result<String> {
                 "/// ASN.1 SEQUENCE: {name}\n#[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]\n#[rasn(crate_root = \"rasn\")]\npub struct {name} {{\n"
             );
 
-            for (i, field) in fields.iter().enumerate() {
+            for field in fields.iter() {
                 if let Some(tag) = field.tag {
                     output.push_str(&format!("    #[rasn(tag({tag}))]\n"));
                 }
