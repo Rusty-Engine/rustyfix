@@ -355,9 +355,21 @@ mod tests {
             .add_bool(114, true);
 
         assert_eq!(handle.message.fields.len(), 4);
-        assert_eq!(handle.message.fields[0].value, "EUR/USD");
-        assert_eq!(handle.message.fields[1].value, "1");
-        assert_eq!(handle.message.fields[2].value, "1000000");
-        assert_eq!(handle.message.fields[3].value, "Y");
+        assert_eq!(
+            handle.message.fields[0].value,
+            crate::types::FixFieldValue::String("EUR/USD".to_string())
+        );
+        assert_eq!(
+            handle.message.fields[1].value,
+            crate::types::FixFieldValue::Integer(1)
+        );
+        assert_eq!(
+            handle.message.fields[2].value,
+            crate::types::FixFieldValue::UnsignedInteger(1000000)
+        );
+        assert_eq!(
+            handle.message.fields[3].value,
+            crate::types::FixFieldValue::Boolean(true)
+        );
     }
 }

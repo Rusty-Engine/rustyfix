@@ -67,7 +67,7 @@ mod tests {
             msg_seq_num: 123,
             fields: vec![Field {
                 tag: 55,
-                value: "EUR/USD".to_string(),
+                value: crate::types::FixFieldValue::String("EUR/USD".to_string()),
             }],
         };
 

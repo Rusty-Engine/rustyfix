@@ -37,8 +37,8 @@ fn test_basic_encoding_decoding() {
         assert_eq!(decoded.msg_seq_num(), 1);
 
         // Verify custom fields
-        assert_eq!(decoded.get_string(11), Some("CL001"));
-        assert_eq!(decoded.get_string(55), Some("EUR/USD"));
+        assert_eq!(decoded.get_string(11), Some("CL001".to_string()));
+        assert_eq!(decoded.get_string(55), Some("EUR/USD".to_string()));
         assert_eq!(decoded.get_int(54), Some(1));
         assert_eq!(decoded.get_uint(38), Some(1_000_000));
     }
@@ -89,7 +89,7 @@ fn test_streaming_decoder() {
         assert_eq!(decoded.msg_seq_num(), (i + 1) as u64);
 
         if i == 1 {
-            assert_eq!(decoded.get_string(112), Some("TEST123"));
+            assert_eq!(decoded.get_string(112), Some("TEST123".to_string()));
         }
     }
 
@@ -141,7 +141,7 @@ fn test_field_types() {
     let decoded = decoder.decode(&encoded).expect("Decoding should succeed");
 
     assert_eq!(decoded.get_bool(114), Some(true));
-    assert_eq!(decoded.get_string(95), Some("test_data"));
+    assert_eq!(decoded.get_string(95), Some("test_data".to_string()));
     assert_eq!(decoded.get_int(31), Some(-100));
     assert_eq!(decoded.get_uint(14), Some(500_000));
 }

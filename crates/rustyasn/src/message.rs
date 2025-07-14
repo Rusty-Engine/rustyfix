@@ -75,7 +75,7 @@ impl Message {
 
         // Add additional fields
         for field in &fix_msg.fields {
-            message.set_field(field.tag, field.value.as_bytes().to_vec());
+            message.set_field(field.tag, field.value.as_bytes());
         }
 
         Some(message)
@@ -115,7 +115,9 @@ impl Message {
                 }
                 self.fields.get(&tag).map(|value| Field {
                     tag,
-                    value: String::from_utf8_lossy(value).to_string(),
+                    value: crate::types::FixFieldValue::from_string(
+                        String::from_utf8_lossy(value).to_string(),
+                    ),
                 })
             })
             .collect();
@@ -374,11 +376,11 @@ mod tests {
             fields: vec![
                 Field {
                     tag: 55,
-                    value: "EUR/USD".to_string(),
+                    value: crate::types::FixFieldValue::String("EUR/USD".to_string()),
                 },
                 Field {
                     tag: 54,
-                    value: "1".to_string(),
+                    value: crate::types::FixFieldValue::String("1".to_string()),
                 },
             ],
         };
@@ -427,14 +429,14 @@ mod tests {
             .iter()
             .find(|f| f.tag == 55)
             .expect("Symbol field should exist in converted message");
-        assert_eq!(symbol_field.value, "EUR/USD");
+        assert_eq!(symbol_field.value.to_string(), "EUR/USD");
 
         let side_field = fix_msg
             .fields
             .iter()
             .find(|f| f.tag == 54)
             .expect("Side field should exist in converted message");
-        assert_eq!(side_field.value, "1");
+        assert_eq!(side_field.value.to_string(), "1");
     }
 
     #[test]

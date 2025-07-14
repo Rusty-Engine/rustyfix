@@ -153,8 +153,8 @@ pub enum FixMessageType {
 }}
 
 impl ToFixFieldValue for FixMessageType {{
-    fn to_fix_field_value(&self) -> String {{
-        self.as_str().to_string()
+    fn to_fix_field_value(&self) -> crate::types::FixFieldValue {{
+        crate::types::FixFieldValue::String(self.as_str().to_string())
     }}
 }}
 "#,
@@ -229,8 +229,8 @@ impl From<FixFieldTag> for u32 {{
 }}
 
 impl ToFixFieldValue for FixFieldTag {{
-    fn to_fix_field_value(&self) -> String {{
-        self.as_u32().to_string()
+    fn to_fix_field_value(&self) -> crate::types::FixFieldValue {{
+        crate::types::FixFieldValue::UnsignedInteger(self.as_u32() as u64)
     }}
 }}
 "#,
@@ -307,7 +307,7 @@ pub struct Asn1Field {
                 let tag = FixFieldTag::from_u32(field.tag as u32)?;
                 Some(Asn1Field {
                     tag,
-                    value: field.value.clone(),
+                    value: field.value.to_string(),
                 })
             })
             .collect();
@@ -328,7 +328,7 @@ pub struct Asn1Field {
             .iter()
             .map(|field| Field {
                 tag: field.tag.as_u32(),
-                value: field.value.clone(),
+                value: crate::types::FixFieldValue::String(field.value.clone()),
             })
             .collect();
         
@@ -418,8 +418,8 @@ pub enum {} {{
 }}
 
 impl ToFixFieldValue for {} {{
-    fn to_fix_field_value(&self) -> String {{
-        self.as_str().to_string()
+    fn to_fix_field_value(&self) -> crate::types::FixFieldValue {{
+        crate::types::FixFieldValue::String(self.as_str().to_string())
     }}
 }}
 

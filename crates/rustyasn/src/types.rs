@@ -26,74 +26,269 @@ pub struct FixMessage {
     pub fields: Vec<Field>,
 }
 
-/// Generic field representation.
+/// ASN.1 CHOICE for representing different FIX field value types natively.
+#[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]
+#[rasn(choice, crate_root = "rasn")]
+pub enum FixFieldValue {
+    /// String/text values
+    #[rasn(tag(context, 0))]
+    String(String),
+
+    /// Signed integer values
+    #[rasn(tag(context, 1))]
+    Integer(i64),
+
+    /// Unsigned integer values  
+    #[rasn(tag(context, 2))]
+    UnsignedInteger(u64),
+
+    /// Decimal/floating point values
+    #[rasn(tag(context, 3))]
+    Decimal(String), // Encoded as string to preserve precision
+
+    /// Boolean values (Y/N in FIX)
+    #[rasn(tag(context, 4))]
+    Boolean(bool),
+
+    /// Single character values
+    #[rasn(tag(context, 5))]
+    Character(String), // Single char stored as string
+
+    /// UTC timestamp values (YYYYMMDD-HH:MM:SS[.sss])
+    #[rasn(tag(context, 6))]
+    UtcTimestamp(String),
+
+    /// UTC date values (YYYYMMDD)
+    #[rasn(tag(context, 7))]
+    UtcDate(String),
+
+    /// UTC time values (HH:MM:SS[.sss])
+    #[rasn(tag(context, 8))]
+    UtcTime(String),
+
+    /// Binary data
+    #[rasn(tag(context, 9))]
+    Data(Vec<u8>),
+
+    /// Raw string for unknown/fallback cases
+    #[rasn(tag(context, 10))]
+    Raw(String),
+}
+
+/// Generic field representation with typed values.
 #[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]
 #[rasn(crate_root = "rasn")]
 pub struct Field {
     /// Field tag number
     pub tag: u32,
 
-    /// Field value as string (simplified)
-    pub value: String,
+    /// Typed field value using ASN.1 CHOICE
+    pub value: FixFieldValue,
 }
 
-/// Trait for converting FIX field types to string values.
+/// Trait for converting FIX field types to typed field values.
 pub trait ToFixFieldValue {
     /// Convert to FIX field value.
-    fn to_fix_field_value(&self) -> String;
+    fn to_fix_field_value(&self) -> FixFieldValue;
+}
+
+impl FixFieldValue {
+    /// Convert the typed value back to a string representation for compatibility.
+    pub fn to_string(&self) -> String {
+        match self {
+            FixFieldValue::String(s) => s.clone(),
+            FixFieldValue::Integer(i) => i.to_string(),
+            FixFieldValue::UnsignedInteger(u) => u.to_string(),
+            FixFieldValue::Decimal(d) => d.clone(),
+            FixFieldValue::Boolean(b) => if *b { "Y" } else { "N" }.to_string(),
+            FixFieldValue::Character(c) => c.clone(),
+            FixFieldValue::UtcTimestamp(ts) => ts.clone(),
+            FixFieldValue::UtcDate(date) => date.clone(),
+            FixFieldValue::UtcTime(time) => time.clone(),
+            FixFieldValue::Data(data) => String::from_utf8_lossy(data).to_string(),
+            FixFieldValue::Raw(raw) => raw.clone(),
+        }
+    }
+
+    /// Convert the typed value to bytes for serialization.
+    pub fn as_bytes(&self) -> Vec<u8> {
+        match self {
+            FixFieldValue::String(s) => s.as_bytes().to_vec(),
+            FixFieldValue::Integer(i) => i.to_string().into_bytes(),
+            FixFieldValue::UnsignedInteger(u) => u.to_string().into_bytes(),
+            FixFieldValue::Decimal(d) => d.as_bytes().to_vec(),
+            FixFieldValue::Boolean(b) => if *b { b"Y" } else { b"N" }.to_vec(),
+            FixFieldValue::Character(c) => c.as_bytes().to_vec(),
+            FixFieldValue::UtcTimestamp(ts) => ts.as_bytes().to_vec(),
+            FixFieldValue::UtcDate(date) => date.as_bytes().to_vec(),
+            FixFieldValue::UtcTime(time) => time.as_bytes().to_vec(),
+            FixFieldValue::Data(data) => data.clone(),
+            FixFieldValue::Raw(raw) => raw.as_bytes().to_vec(),
+        }
+    }
+
+    /// Create a `FixFieldValue` from a string, inferring the best type based on content.
+    pub fn from_string(s: String) -> Self {
+        // Try to parse as integer first
+        if let Ok(i) = s.parse::<i64>() {
+            return FixFieldValue::Integer(i);
+        }
+
+        // Try to parse as unsigned integer
+        if let Ok(u) = s.parse::<u64>() {
+            return FixFieldValue::UnsignedInteger(u);
+        }
+
+        // Check for boolean values
+        if s == "Y" {
+            return FixFieldValue::Boolean(true);
+        }
+        if s == "N" {
+            return FixFieldValue::Boolean(false);
+        }
+
+        // Check for single character
+        if s.len() == 1 {
+            return FixFieldValue::Character(s);
+        }
+
+        // Check for timestamp format (YYYYMMDD-HH:MM:SS[.sss])
+        if s.len() >= 17
+            && s.chars().nth(8) == Some('-')
+            && s.chars().nth(11) == Some(':')
+            && s.chars().nth(14) == Some(':')
+        {
+            return FixFieldValue::UtcTimestamp(s);
+        }
+
+        // Check for date format (YYYYMMDD)
+        if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
+            return FixFieldValue::UtcDate(s);
+        }
+
+        // Check for time format (HH:MM:SS[.sss])
+        if (s.len() == 8 || s.len() == 12)
+            && s.chars().nth(2) == Some(':')
+            && s.chars().nth(5) == Some(':')
+        {
+            return FixFieldValue::UtcTime(s);
+        }
+
+        // Default to string
+        FixFieldValue::String(s)
+    }
+
+    /// Create a `FixFieldValue` from bytes and field type information.
+    pub fn from_bytes_with_type(
+        value: &[u8],
+        fix_type: crate::schema::FixDataType,
+    ) -> Result<Self, String> {
+        use crate::schema::FixDataType;
+
+        let s = String::from_utf8_lossy(value).to_string();
+
+        match fix_type {
+            FixDataType::Int => {
+                let i = s
+                    .parse::<i64>()
+                    .map_err(|_| format!("Invalid integer: {s}"))?;
+                Ok(FixFieldValue::Integer(i))
+            }
+            FixDataType::Length
+            | FixDataType::NumInGroup
+            | FixDataType::SeqNum
+            | FixDataType::TagNum
+            | FixDataType::DayOfMonth => {
+                let u = s
+                    .parse::<u64>()
+                    .map_err(|_| format!("Invalid unsigned integer: {s}"))?;
+                Ok(FixFieldValue::UnsignedInteger(u))
+            }
+            FixDataType::Float
+            | FixDataType::Qty
+            | FixDataType::Price
+            | FixDataType::PriceOffset
+            | FixDataType::Amt
+            | FixDataType::Percentage => {
+                // Validate as decimal but store as string to preserve precision
+                s.parse::<f64>()
+                    .map_err(|_| format!("Invalid decimal: {s}"))?;
+                Ok(FixFieldValue::Decimal(s))
+            }
+            FixDataType::Char => {
+                if s.len() != 1 {
+                    return Err(format!(
+                        "Character field must be exactly 1 character, got: {s}"
+                    ));
+                }
+                Ok(FixFieldValue::Character(s))
+            }
+            FixDataType::Boolean => match s.as_str() {
+                "Y" => Ok(FixFieldValue::Boolean(true)),
+                "N" => Ok(FixFieldValue::Boolean(false)),
+                _ => Err(format!("Boolean field must be Y or N, got: {s}")),
+            },
+            FixDataType::UtcTimestamp => Ok(FixFieldValue::UtcTimestamp(s)),
+            FixDataType::UtcDateOnly | FixDataType::LocalMktDate => Ok(FixFieldValue::UtcDate(s)),
+            FixDataType::UtcTimeOnly | FixDataType::TzTimeOnly => Ok(FixFieldValue::UtcTime(s)),
+            FixDataType::TzTimestamp => Ok(FixFieldValue::UtcTimestamp(s)),
+            FixDataType::Data | FixDataType::XmlData => Ok(FixFieldValue::Data(value.to_vec())),
+            _ => Ok(FixFieldValue::String(s)),
+        }
+    }
 }
 
 impl ToFixFieldValue for i32 {
-    fn to_fix_field_value(&self) -> String {
-        self.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::Integer(i64::from(*self))
     }
 }
 
 impl ToFixFieldValue for i64 {
-    fn to_fix_field_value(&self) -> String {
-        self.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::Integer(*self)
     }
 }
 
 impl ToFixFieldValue for u32 {
-    fn to_fix_field_value(&self) -> String {
-        self.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::UnsignedInteger(u64::from(*self))
     }
 }
 
 impl ToFixFieldValue for u64 {
-    fn to_fix_field_value(&self) -> String {
-        self.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::UnsignedInteger(*self)
     }
 }
 
 impl ToFixFieldValue for bool {
-    fn to_fix_field_value(&self) -> String {
-        if *self { "Y" } else { "N" }.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::Boolean(*self)
     }
 }
 
 impl ToFixFieldValue for &str {
-    fn to_fix_field_value(&self) -> String {
-        (*self).to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::String((*self).to_string())
     }
 }
 
 impl ToFixFieldValue for String {
-    fn to_fix_field_value(&self) -> String {
-        self.clone()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::String(self.clone())
     }
 }
 
 impl ToFixFieldValue for FixString {
-    fn to_fix_field_value(&self) -> String {
-        self.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::String(self.to_string())
     }
 }
 
 impl ToFixFieldValue for Decimal {
-    fn to_fix_field_value(&self) -> String {
-        self.to_string()
+    fn to_fix_field_value(&self) -> FixFieldValue {
+        FixFieldValue::Decimal(self.to_string())
     }
 }
 
@@ -103,10 +298,13 @@ mod tests {
 
     #[test]
     fn test_field_value_conversions() {
-        assert_eq!(42i32.to_fix_field_value(), "42");
-        assert_eq!(true.to_fix_field_value(), "Y");
-        assert_eq!(false.to_fix_field_value(), "N");
-        assert_eq!("test".to_fix_field_value(), "test");
+        assert_eq!(42i32.to_fix_field_value(), FixFieldValue::Integer(42));
+        assert_eq!(true.to_fix_field_value(), FixFieldValue::Boolean(true));
+        assert_eq!(false.to_fix_field_value(), FixFieldValue::Boolean(false));
+        assert_eq!(
+            "test".to_fix_field_value(),
+            FixFieldValue::String("test".to_string())
+        );
     }
 
     #[test]
@@ -118,11 +316,15 @@ mod tests {
             msg_seq_num: 123,
             fields: vec![Field {
                 tag: 55,
-                value: "EUR/USD".to_string(),
+                value: FixFieldValue::String("EUR/USD".to_string()),
             }],
         };
 
         assert_eq!(msg.msg_type, "D");
         assert_eq!(msg.fields.len(), 1);
+        assert_eq!(
+            msg.fields[0].value,
+            FixFieldValue::String("EUR/USD".to_string())
+        );
     }
 }

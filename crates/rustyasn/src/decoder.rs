@@ -22,7 +22,7 @@ pub struct Message {
     inner: FixMessage,
 
     /// Field lookup map for fast access
-    fields: FxHashMap<u32, String>,
+    fields: FxHashMap<u32, crate::types::FixFieldValue>,
 }
 
 impl Message {
@@ -31,10 +31,22 @@ impl Message {
         let mut fields = FxHashMap::default();
 
         // Add standard fields
-        fields.insert(35, inner.msg_type.clone());
-        fields.insert(49, inner.sender_comp_id.clone());
-        fields.insert(56, inner.target_comp_id.clone());
-        fields.insert(34, inner.msg_seq_num.to_string());
+        fields.insert(
+            35,
+            crate::types::FixFieldValue::String(inner.msg_type.clone()),
+        );
+        fields.insert(
+            49,
+            crate::types::FixFieldValue::String(inner.sender_comp_id.clone()),
+        );
+        fields.insert(
+            56,
+            crate::types::FixFieldValue::String(inner.target_comp_id.clone()),
+        );
+        fields.insert(
+            34,
+            crate::types::FixFieldValue::UnsignedInteger(inner.msg_seq_num),
+        );
 
         // Add additional fields
         for field in &inner.fields {
@@ -65,31 +77,44 @@ impl Message {
     }
 
     /// Gets a field value by tag.
-    pub fn get_field(&self, tag: u32) -> Option<&str> {
-        self.fields.get(&tag).map(std::string::String::as_str)
+    pub fn get_field(&self, tag: u32) -> Option<String> {
+        self.fields
+            .get(&tag)
+            .map(super::types::FixFieldValue::to_string)
     }
 
     /// Gets a string field value.
-    pub fn get_string(&self, tag: u32) -> Option<&str> {
+    pub fn get_string(&self, tag: u32) -> Option<String> {
         self.get_field(tag)
     }
 
     /// Gets an integer field value.
     pub fn get_int(&self, tag: u32) -> Option<i64> {
-        self.get_field(tag)?.parse().ok()
+        match self.fields.get(&tag)? {
+            crate::types::FixFieldValue::Integer(i) => Some(*i),
+            crate::types::FixFieldValue::UnsignedInteger(u) => Some(*u as i64),
+            _ => self.get_field(tag)?.parse().ok(),
+        }
     }
 
     /// Gets an unsigned integer field value.
     pub fn get_uint(&self, tag: u32) -> Option<u64> {
-        self.get_field(tag)?.parse().ok()
+        match self.fields.get(&tag)? {
+            crate::types::FixFieldValue::UnsignedInteger(u) => Some(*u),
+            crate::types::FixFieldValue::Integer(i) => Some(*i as u64),
+            _ => self.get_field(tag)?.parse().ok(),
+        }
     }
 
     /// Gets a boolean field value.
     pub fn get_bool(&self, tag: u32) -> Option<bool> {
-        match self.get_field(tag)? {
-            "Y" => Some(true),
-            "N" => Some(false),
-            _ => None,
+        match self.fields.get(&tag)? {
+            crate::types::FixFieldValue::Boolean(b) => Some(*b),
+            _ => match self.get_field(tag)?.as_str() {
+                "Y" => Some(true),
+                "N" => Some(false),
+                _ => None,
+            },
         }
     }
 
@@ -372,7 +397,7 @@ mod tests {
             msg_seq_num: 123,
             fields: vec![Field {
                 tag: 55,
-                value: "EUR/USD".to_string(),
+                value: crate::types::FixFieldValue::String("EUR/USD".to_string()),
             }],
         };
 
@@ -381,7 +406,7 @@ mod tests {
         assert_eq!(message.msg_type(), "D");
         assert_eq!(message.sender_comp_id(), "SENDER");
         assert_eq!(message.msg_seq_num(), 123);
-        assert_eq!(message.get_string(55), Some("EUR/USD"));
+        assert_eq!(message.get_string(55), Some("EUR/USD".to_string()));
     }
 
     #[test]
