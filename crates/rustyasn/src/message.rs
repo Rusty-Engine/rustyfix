@@ -86,7 +86,7 @@ impl Message {
             if field.tag == 52 {
                 continue;
             }
-            message.set_field(field.tag, field.value.as_bytes());
+            message.set_field(field.tag, field.value.as_bytes().clone());
         }
 
         Some(message)
