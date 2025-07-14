@@ -104,7 +104,12 @@ impl Encoder {
             .and_then(|bytes| {
                 std::str::from_utf8(bytes)
                     .map(std::convert::Into::into)
-                    .map_err(|_| Error::Decode(crate::DecodeError::InvalidUtf8 { offset: 0 }))
+                    .map_err(|_| {
+                        Error::Encode(EncodeError::InvalidFieldValue {
+                            tag,
+                            reason: "Invalid UTF-8 in field value".into(),
+                        })
+                    })
             })
     }
 
@@ -118,7 +123,12 @@ impl Encoder {
         })?;
 
         std::str::from_utf8(bytes)
-            .map_err(|_| Error::Decode(crate::DecodeError::InvalidUtf8 { offset: 0 }))?
+            .map_err(|_| {
+                Error::Encode(EncodeError::InvalidFieldValue {
+                    tag,
+                    reason: "Invalid UTF-8 in field value".into(),
+                })
+            })?
             .parse::<u64>()
             .map_err(|_| {
                 Error::Encode(EncodeError::InvalidFieldValue {
