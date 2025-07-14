@@ -7,7 +7,6 @@ use crate::{
     types::{Field, FixMessage, ToFixFieldValue},
 };
 use bytes::BytesMut;
-use parking_lot::RwLock;
 use rasn::{ber::encode as ber_encode, der::encode as der_encode, oer::encode as oer_encode};
 use rustyfix::{Dictionary, FieldMap, FieldType, GetConfig, SetField};
 use smallvec::SmallVec;
@@ -20,7 +19,6 @@ use std::sync::Arc;
 pub struct Encoder {
     config: Config,
     schema: Arc<Schema>,
-    buffer: RwLock<BytesMut>,
 }
 
 /// Handle for encoding a single message.
@@ -45,12 +43,10 @@ impl Encoder {
     /// Creates a new encoder with the given configuration and dictionary.
     pub fn new(config: Config, dictionary: Arc<Dictionary>) -> Self {
         let schema = Arc::new(Schema::new(dictionary));
-        let buffer_size = config.stream_buffer_size;
 
         Self {
             config,
             schema,
-            buffer: RwLock::new(BytesMut::with_capacity(buffer_size)),
         }
     }
 

@@ -12,6 +12,13 @@ use rustc_hash::FxHashMap;
 use rustyfix::{Dictionary, GetConfig, StreamingDecoder as StreamingDecoderTrait};
 use std::sync::Arc;
 
+// ASN.1 tag constants
+const ASN1_SEQUENCE_TAG: u8 = 0x30;
+const ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK: u8 = 0xE0;
+const ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG: u8 = 0xA0;
+#[cfg(test)]
+const ASN1_LONG_FORM_LENGTH_2_BYTES: u8 = 0x82; // Long form length indicator for 2-byte length
+
 /// Decoded FIX message representation.
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -299,7 +306,7 @@ impl DecoderStreaming {
     /// Checks if a byte is a valid ASN.1 tag.
     fn is_valid_asn1_tag(&self, tag: u8) -> bool {
         // Check for valid ASN.1 tag format
-        tag == 0x30 || (tag & 0xE0) == 0xA0 // SEQUENCE or context-specific constructed
+        tag == ASN1_SEQUENCE_TAG || (tag & ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK) == ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG // SEQUENCE or context-specific constructed
     }
 
     /// Decodes ASN.1 length at the given offset.
@@ -419,7 +426,7 @@ mod tests {
         assert_eq!(decoder.buffered_bytes(), 0);
         assert_eq!(decoder.num_bytes_required(), 1);
 
-        decoder.feed(&[0x30, 0x82]); // SEQUENCE tag with long form length
+        decoder.feed(&[ASN1_SEQUENCE_TAG, ASN1_LONG_FORM_LENGTH_2_BYTES]); // SEQUENCE tag with long form length
         assert_eq!(decoder.buffered_bytes(), 2);
     }
 }

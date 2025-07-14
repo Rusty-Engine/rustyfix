@@ -279,8 +279,8 @@ impl Message {
         self.get(49)
     }
 
-    /// Gets target company ID field (tag 56).
-    pub fn target_company_id(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
+    /// Gets target component ID field (tag 56).
+    pub fn target_comp_id(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
         self.get(56)
     }
 

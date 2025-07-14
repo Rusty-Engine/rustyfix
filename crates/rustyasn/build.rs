@@ -8,6 +8,29 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Sanitizes a string to be a valid Rust identifier by replacing invalid characters.
+/// For message types, preserves alphanumeric characters and replaces others with underscores.
+/// Does not add prefix for numeric message types since they'll be used after an underscore.
+fn sanitize_identifier(input: &str) -> String {
+    let mut result = String::new();
+    
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() {
+            result.push(ch);
+        } else {
+            // Replace invalid characters (like /, +, -, etc.) with underscore
+            result.push('_');
+        }
+    }
+    
+    // Ensure result is not empty
+    if result.is_empty() {
+        result = "_".to_string();
+    }
+    
+    result
+}
+
 fn main() -> Result<()> {
     // Set up rerun conditions
     println!("cargo:rerun-if-changed=build.rs");
@@ -113,12 +136,23 @@ pub enum FixMessageType {
     for message in dictionary.messages() {
         let msg_type = message.msg_type();
         let name = message.name();
-        let mut enum_name = format!("{}_{}", name.to_pascal_case(), msg_type);
+        let sanitized_msg_type = sanitize_identifier(&msg_type);
+        // For clean alphanumeric message types, concatenate without underscore for better Rust naming
+        let mut enum_name = if sanitized_msg_type.chars().all(|c| c.is_ascii_alphanumeric()) {
+            format!("{}{}", name.to_pascal_case(), sanitized_msg_type)
+        } else {
+            // Use underscore for complex sanitized types (those with replaced characters)
+            format!("{}_{}", name.to_pascal_case(), sanitized_msg_type)
+        };
 
         // Handle name collisions
         let mut counter = 1;
         while used_names.contains(&enum_name) {
-            enum_name = format!("{}_{}_{}", name.to_pascal_case(), msg_type, counter);
+            if sanitized_msg_type.chars().all(|c| c.is_ascii_alphanumeric()) {
+                enum_name = format!("{}{}{}", name.to_pascal_case(), sanitized_msg_type, counter);
+            } else {
+                enum_name = format!("{}_{}{}", name.to_pascal_case(), sanitized_msg_type, counter);
+            }
             counter += 1;
         }
         used_names.insert(enum_name.clone());

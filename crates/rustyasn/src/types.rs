@@ -129,14 +129,23 @@ impl FixFieldValue {
 
     /// Create a `FixFieldValue` from a string, inferring the best type based on content.
     pub fn from_string(s: String) -> Self {
-        // Try to parse as integer first
-        if let Ok(i) = s.parse::<i64>() {
-            return FixFieldValue::Integer(i);
-        }
-
-        // Try to parse as unsigned integer
-        if let Ok(u) = s.parse::<u64>() {
-            return FixFieldValue::UnsignedInteger(u);
+        // Check for integer types with better precedence handling
+        if s.starts_with('-') {
+            // Negative numbers can only be signed integers
+            if let Ok(i) = s.parse::<i64>() {
+                return FixFieldValue::Integer(i);
+            }
+        } else {
+            // For non-negative numbers, try unsigned first to prefer the more specific type
+            if let Ok(u) = s.parse::<u64>() {
+                // If it fits in i64 range, use signed for consistency with FIX standard
+                if u <= i64::MAX as u64 {
+                    return FixFieldValue::Integer(u as i64);
+                } else {
+                    // Only use unsigned for values that don't fit in i64
+                    return FixFieldValue::UnsignedInteger(u);
+                }
+            }
         }
 
         // Check for boolean values
