@@ -204,7 +204,10 @@ impl Decoder {
 
         // Check maximum message size
         if data.len() > self.config.max_message_size {
-            return Err(Error::Decode(DecodeError::InvalidLength { offset: 0 }));
+            return Err(Error::Decode(DecodeError::MessageTooLarge {
+                size: data.len(),
+                max_size: self.config.max_message_size,
+            }));
         }
 
         // Decode based on encoding rule

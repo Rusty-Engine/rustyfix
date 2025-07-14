@@ -511,72 +511,14 @@ impl Schema {
 
     /// Validates UTC date format (YYYYMMDD)
     fn is_valid_utc_date(s: &str) -> bool {
-        if s.len() != 8 {
-            return false;
-        }
-
-        // All characters must be digits
-        if !s.chars().all(|c| c.is_ascii_digit()) {
-            return false;
-        }
-
-        // Basic range validation
-        let year: u32 = s[..4].parse().unwrap_or(0);
-        let month: u32 = s[4..6].parse().unwrap_or(0);
-        let day: u32 = s[6..8].parse().unwrap_or(0);
-
-        (1900..=2099).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day)
+        // Use chrono for robust date validation that handles leap years and days per month correctly
+        chrono::NaiveDate::parse_from_str(s, "%Y%m%d").is_ok()
     }
 
     /// Validates UTC time format (HH:MM:SS or HH:MM:SS.sss)
     fn is_valid_utc_time(s: &str) -> bool {
-        // Format: HH:MM:SS (8 chars) or HH:MM:SS.sss (12 chars)
-        if s.len() != 8 && s.len() != 12 {
-            return false;
-        }
-
-        // Check HH:MM:SS part
-        if s.len() >= 8 {
-            let time_part = &s[..8];
-
-            // Format: HH:MM:SS
-            if time_part.len() != 8
-                || time_part.chars().nth(2) != Some(':')
-                || time_part.chars().nth(5) != Some(':')
-            {
-                return false;
-            }
-
-            // Extract and validate time components
-            let hour_str = &time_part[..2];
-            let min_str = &time_part[3..5];
-            let sec_str = &time_part[6..8];
-
-            if let (Ok(hour), Ok(min), Ok(sec)) = (
-                hour_str.parse::<u32>(),
-                min_str.parse::<u32>(),
-                sec_str.parse::<u32>(),
-            ) {
-                if hour >= 24 || min >= 60 || sec >= 60 {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        // Check milliseconds part if present
-        if s.len() == 12 {
-            if s.chars().nth(8) != Some('.') {
-                return false;
-            }
-            let ms_str = &s[9..];
-            if ms_str.len() != 3 || !ms_str.chars().all(|c| c.is_ascii_digit()) {
-                return false;
-            }
-        }
-
-        true
+        // Use chrono for robust time validation. %.f handles optional fractional seconds
+        chrono::NaiveTime::parse_from_str(s, "%H:%M:%S%.f").is_ok()
     }
 }
 
