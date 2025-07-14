@@ -139,16 +139,29 @@ impl Encoder {
     }
 
     /// Adds all non-header fields to the message.
+    ///
+    /// This method iterates through all fields defined in the FIX dictionary
+    /// and checks if they are present in the message. This ensures no data loss
+    /// compared to the previous hardcoded approach.
     fn add_message_fields<F: FieldMap<u32>>(
         &self,
         handle: &mut EncoderHandle,
         msg: &F,
     ) -> Result<()> {
-        // Note: FieldMap doesn't provide field iteration, so we try common field tags
-        // In a full implementation, this would use a field iterator or schema
-        let common_tags = [55, 54, 38, 44, 114, 60]; // Symbol, Side, OrderQty, Price, etc.
+        // Get all field definitions from the schema's dictionary
+        let dictionary = self.schema.dictionary();
+        let all_fields = dictionary.fields();
 
-        for &tag in &common_tags {
+        // Process each field defined in the dictionary
+        for field in all_fields {
+            let tag = field.tag().get();
+
+            // Skip standard header fields that are already handled by start_message
+            if self.is_standard_header_field(tag) {
+                continue;
+            }
+
+            // Check if this field is present in the message
             if let Some(raw_data) = msg.get_raw(tag) {
                 let value_str = String::from_utf8_lossy(raw_data);
                 handle.add_field(tag, value_str.to_string());
@@ -156,6 +169,22 @@ impl Encoder {
         }
 
         Ok(())
+    }
+
+    /// Checks if a field tag is a standard FIX header field.
+    /// These fields are handled separately by `start_message`.
+    fn is_standard_header_field(&self, tag: u32) -> bool {
+        matches!(
+            tag,
+            8 |  // BeginString
+            9 |  // BodyLength  
+            10 | // CheckSum
+            34 | // MsgSeqNum
+            35 | // MsgType
+            49 | // SenderCompID
+            52 | // SendingTime
+            56 // TargetCompID
+        )
     }
 
     /// Encodes using the specified encoding rule.

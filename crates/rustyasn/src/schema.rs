@@ -146,6 +146,11 @@ impl Schema {
         schema
     }
 
+    /// Returns a reference to the underlying FIX dictionary.
+    pub fn dictionary(&self) -> &Dictionary {
+        &self.dictionary
+    }
+
     /// Builds field type information from dictionary.
     fn build_field_types(&mut self) {
         // Standard header fields
