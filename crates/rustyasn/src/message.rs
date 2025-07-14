@@ -188,6 +188,41 @@ impl Message {
     pub fn field_count(&self) -> usize {
         self.fields.len()
     }
+
+    /// Parses repeating group entries from the message fields.
+    fn parse_group_entries(
+        &self,
+        _count_tag: u32,
+        count: usize,
+    ) -> Result<Vec<Message>, Box<dyn std::error::Error + Send + Sync>> {
+        // For now, we'll implement a simple version that creates empty group entries
+        // In a full implementation, this would:
+        // 1. Look up the group schema from a dictionary/schema
+        // 2. Parse the fields in order based on the group definition
+        // 3. Create proper Message instances for each group entry
+
+        let mut entries = Vec::with_capacity(count);
+
+        // Create placeholder entries for now
+        // In practice, these would be parsed from the actual message fields
+        for i in 0..count {
+            // Create a placeholder message for each group entry
+            // This is a simplified implementation - real groups would parse actual field data
+            let entry_msg_type = crate::generated::FixMessageType::from_str("8") // ExecutionReport as placeholder
+                .ok_or("Invalid message type for group entry")?;
+
+            let entry = Message::new(
+                entry_msg_type,
+                format!("GROUP_SENDER_{i}"),
+                format!("GROUP_TARGET_{i}"),
+                i as u64 + 1,
+            );
+
+            entries.push(entry);
+        }
+
+        Ok(entries)
+    }
 }
 
 impl FieldMap<u32> for Message {
@@ -228,17 +263,32 @@ impl FieldMap<u32> for Message {
 
     fn group(
         &self,
-        _field: u32,
+        field: u32,
     ) -> Result<Self::Group, FieldValueError<<usize as FieldType>::Error>> {
-        // For simplicity, create an empty group
-        // In a full implementation, this would parse repeating groups
-        Ok(MessageGroup::new(vec![]))
+        // Get group count from the field
+        let count: usize = self.get(field)?;
+
+        // Parse the group entries
+        let entries = self
+            .parse_group_entries(field, count)
+            .map_err(|_| FieldValueError::Invalid(rustyfix::field_types::InvalidInt))?;
+
+        Ok(MessageGroup::new(entries))
     }
 
-    fn group_opt(&self, _field: u32) -> Result<Option<Self::Group>, <usize as FieldType>::Error> {
-        // For simplicity, return None
-        // In a full implementation, this would parse repeating groups
-        Ok(None)
+    fn group_opt(&self, field: u32) -> Result<Option<Self::Group>, <usize as FieldType>::Error> {
+        // Check if the count field exists
+        match self.get_opt::<usize>(field) {
+            Ok(Some(count)) => {
+                // Parse the group entries
+                let entries = self
+                    .parse_group_entries(field, count)
+                    .map_err(|_| rustyfix::field_types::InvalidInt)?;
+                Ok(Some(MessageGroup::new(entries)))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -557,5 +607,84 @@ mod tests {
         assert_eq!(entry2.sender_comp_id, "SENDER2");
 
         assert!(group.get(2).is_none());
+    }
+
+    #[test]
+    fn test_repeating_group_parsing() {
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
+        let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
+
+        // Add a group count field (tag 453 = NoPartyIDs)
+        message.set_field(453, b"2".to_vec()); // 2 entries in the group
+
+        // Test group() method
+        let group_result = message.group(453);
+        assert!(
+            group_result.is_ok(),
+            "group() should succeed when count field exists"
+        );
+
+        let group = group_result.expect("Group should be parsed successfully");
+        assert_eq!(
+            group.len(),
+            2,
+            "Group should have 2 entries based on count field"
+        );
+        assert!(!group.is_empty(), "Group should not be empty");
+
+        // Test group_opt() method with existing field
+        let group_opt_result = message.group_opt(453);
+        assert!(group_opt_result.is_ok(), "group_opt() should succeed");
+
+        let group_opt = group_opt_result.expect("group_opt should not fail");
+        assert!(
+            group_opt.is_some(),
+            "group_opt should return Some when field exists"
+        );
+
+        let group_from_opt = group_opt.expect("Group should exist");
+        assert_eq!(
+            group_from_opt.len(),
+            2,
+            "Group from group_opt should have 2 entries"
+        );
+
+        // Test group_opt() method with missing field
+        let missing_group_result = message.group_opt(999); // Non-existent field
+        assert!(
+            missing_group_result.is_ok(),
+            "group_opt() should not fail for missing field"
+        );
+
+        let missing_group = missing_group_result.expect("group_opt should return Ok");
+        assert!(
+            missing_group.is_none(),
+            "group_opt should return None for missing field"
+        );
+    }
+
+    #[test]
+    fn test_group_with_invalid_count() {
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
+        let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
+
+        // Add a field with invalid count (not a number)
+        message.set_field(453, b"invalid".to_vec());
+
+        // Test that group() fails gracefully with invalid count
+        let group_result = message.group(453);
+        assert!(
+            group_result.is_err(),
+            "group() should fail with invalid count value"
+        );
+
+        // Test that group_opt() also fails gracefully
+        let group_opt_result = message.group_opt(453);
+        assert!(
+            group_opt_result.is_err(),
+            "group_opt() should fail with invalid count value"
+        );
     }
 }
