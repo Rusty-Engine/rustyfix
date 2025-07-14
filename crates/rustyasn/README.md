@@ -45,14 +45,14 @@ let mut handle = encoder.start_message(
     "SENDER001",   // SenderCompID
     "TARGET001",   // TargetCompID
     1,             // MsgSeqNum
-    timestamp,     // SendingTime
 );
 
 handle
     .add_string(11, "CL001")      // ClOrdID
     .add_string(55, "EUR/USD")    // Symbol
     .add_int(54, 1)               // Side (1=Buy)
-    .add_uint(38, 1_000_000);     // OrderQty
+    .add_uint(38, 1_000_000)      // OrderQty
+    .add_string(52, "20240101-12:00:00"); // SendingTime
 
 let encoded = handle.encode()?;
 
