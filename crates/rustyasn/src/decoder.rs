@@ -9,7 +9,7 @@ use crate::{
 use bytes::Bytes;
 use rasn::{ber::decode as ber_decode, der::decode as der_decode, oer::decode as oer_decode};
 use rustc_hash::FxHashMap;
-use rustyfix::{Dictionary, StreamingDecoder as StreamingDecoderTrait};
+use rustyfix::{Dictionary, GetConfig, StreamingDecoder as StreamingDecoderTrait};
 use std::sync::Arc;
 
 /// Decoded FIX message representation.
@@ -105,6 +105,18 @@ pub struct Decoder {
     schema: Arc<Schema>,
 }
 
+impl GetConfig for Decoder {
+    type Config = Config;
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn config_mut(&mut self) -> &mut Self::Config {
+        &mut self.config
+    }
+}
+
 impl Decoder {
     /// Creates a new decoder with the given configuration and dictionary.
     pub fn new(config: Config, dictionary: Arc<Dictionary>) -> Self {
@@ -187,6 +199,18 @@ enum DecoderState {
     ReadingLength { offset: usize },
     /// Reading message data
     ReadingMessage { length: usize, offset: usize },
+}
+
+impl GetConfig for DecoderStreaming {
+    type Config = Config;
+
+    fn config(&self) -> &Self::Config {
+        self.decoder.config()
+    }
+
+    fn config_mut(&mut self) -> &mut Self::Config {
+        self.decoder.config_mut()
+    }
 }
 
 impl DecoderStreaming {

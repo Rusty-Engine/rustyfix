@@ -51,7 +51,9 @@ pub mod config;
 pub mod decoder;
 pub mod encoder;
 pub mod error;
+pub mod field_types;
 pub mod generated;
+pub mod message;
 pub mod schema;
 pub mod types;
 
@@ -62,7 +64,11 @@ pub use config::{Config, EncodingRule};
 pub use decoder::{Decoder, DecoderStreaming};
 pub use encoder::{Encoder, EncoderHandle};
 pub use error::{DecodeError, EncodeError, Error, Result};
+pub use field_types::{
+    Asn1Boolean, Asn1Bytes, Asn1FieldError, Asn1Integer, Asn1String, Asn1UInteger,
+};
 pub use generated::{Asn1Field, Asn1FixMessage, FixFieldTag, FixMessageType};
+pub use message::{Message, MessageGroup};
 
 // Re-export rasn types that users might need
 pub use rasn::{AsnType, Decode, Encode};

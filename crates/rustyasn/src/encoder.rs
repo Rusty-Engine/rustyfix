@@ -9,7 +9,8 @@ use crate::{
 use bytes::BytesMut;
 use parking_lot::RwLock;
 use rasn::{ber::encode as ber_encode, der::encode as der_encode, oer::encode as oer_encode};
-use rustyfix::{Dictionary, FieldMap};
+use rustyfix::{Dictionary, FieldMap, FieldType, GetConfig, SetField};
+use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
 type FixString = SmartString<LazyCompact>;
@@ -26,6 +27,18 @@ pub struct Encoder {
 pub struct EncoderHandle<'a> {
     encoder: &'a Encoder,
     message: FixMessage,
+}
+
+impl GetConfig for Encoder {
+    type Config = Config;
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn config_mut(&mut self) -> &mut Self::Config {
+        &mut self.config
+    }
 }
 
 impl Encoder {
@@ -118,10 +131,20 @@ impl Encoder {
     /// Adds all non-header fields to the message.
     fn add_message_fields<F: FieldMap<u32>>(
         &self,
-        _handle: &mut EncoderHandle,
-        _msg: &F,
+        handle: &mut EncoderHandle,
+        msg: &F,
     ) -> Result<()> {
-        // TODO: Implement field iteration from FieldMap
+        // Note: FieldMap doesn't provide field iteration, so we try common field tags
+        // In a full implementation, this would use a field iterator or schema
+        let common_tags = [55, 54, 38, 44, 114, 60]; // Symbol, Side, OrderQty, Price, etc.
+
+        for &tag in &common_tags {
+            if let Some(raw_data) = msg.get_raw(tag) {
+                let value_str = String::from_utf8_lossy(raw_data);
+                handle.add_field(tag as u16, value_str.to_string());
+            }
+        }
+
         Ok(())
     }
 
@@ -145,6 +168,23 @@ impl Encoder {
                 oer_encode(message).map_err(|e| Error::Encode(EncodeError::Internal(e.to_string())))
             }
         }
+    }
+}
+
+impl SetField<u32> for EncoderHandle<'_> {
+    fn set_with<'b, V>(&'b mut self, field: u32, value: V, _settings: V::SerializeSettings)
+    where
+        V: FieldType<'b>,
+    {
+        // Serialize the value to bytes using a temporary buffer that implements Buffer
+        let mut temp_buffer: SmallVec<[u8; 64]> = SmallVec::new();
+        value.serialize_with(&mut temp_buffer, _settings);
+
+        // Convert to string for FIX compatibility
+        let value_str = String::from_utf8_lossy(&temp_buffer);
+
+        // Add to the message using the existing add_field method
+        self.add_field(field as u16, value_str.to_string());
     }
 }
 
