@@ -101,7 +101,7 @@ fn main() -> Result<()> {
 
     // Check available features dynamically
     let enabled_features = get_enabled_fix_features();
-    println!("cargo:warning=Detected FIX features: {enabled_features:?}");
+    // println!("cargo:warning=Detected FIX features: {enabled_features:?}");
 
     // Generate ASN.1 definitions from FIX dictionaries
     // This creates type-safe ASN.1 representations of FIX message structures
@@ -956,6 +956,12 @@ fn parse_asn1_schema(content: &str) -> Result<Asn1Schema> {
             || line.starts_with("BEGIN")
             || line.starts_with("END")
         {
+            i += 1;
+            continue;
+        }
+
+        // Skip ASN.1 module definition lines (MODULE DEFINITIONS ::= BEGIN)
+        if line.contains("DEFINITIONS ::= BEGIN") {
             i += 1;
             continue;
         }
