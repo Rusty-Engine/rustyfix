@@ -30,7 +30,7 @@ rustyasn = "0.7.4"
 
 ```rust
 use rustyasn::{Config, Encoder, Decoder, EncodingRule};
-use rustyfix::Dictionary;
+use rustyfix_dictionary::Dictionary;
 use std::sync::Arc;
 
 fn basic_example() -> Result<(), Box<dyn std::error::Error>> {
@@ -60,42 +60,74 @@ fn basic_example() -> Result<(), Box<dyn std::error::Error>> {
     // Decode the message
     let decoded = decoder.decode(&encoded)?;
     assert_eq!(decoded.msg_type(), "D");
-    assert_eq!(decoded.get_string(55), Some("EUR/USD"));
+    assert_eq!(decoded.get_string(55), Some("EUR/USD".to_string()));
     
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_example() {
+        basic_example().expect("Basic example should work");
+    }
 }
 ```
 
 ### Streaming Decoder
 
 ```rust
-use rustyasn::{Config, DecoderStreaming, EncodingRule};
-use rustyfix::Dictionary;
+use rustyasn::{Config, Encoder, DecoderStreaming, EncodingRule};
+use rustyfix_dictionary::Dictionary;
 use std::sync::Arc;
 
 fn streaming_example() -> Result<(), Box<dyn std::error::Error>> {
     // Setup
     let dict = Arc::new(Dictionary::fix44()?);
     let config = Config::new(EncodingRule::DER);
+    
+    // Create some test messages first using the encoder
+    let encoder = Encoder::new(config.clone(), dict.clone());
+    let mut test_messages = Vec::new();
+    
+    for seq_num in 1..=3 {
+        let mut handle = encoder.start_message("0", "SENDER", "TARGET", seq_num);
+        handle.add_string(112, format!("TestID_{}", seq_num)); // TestReqID
+        let encoded = handle.encode()?;
+        test_messages.extend_from_slice(&encoded);
+    }
+    
+    // Now demonstrate streaming decoding
     let mut decoder = DecoderStreaming::new(config, dict);
 
-    // Sample data chunks (would come from network/file in real usage)
-    let data_chunk1 = &[0x30, 0x1A, 0x02, 0x01, 0x44]; // Sample ASN.1 data
-    let data_chunk2 = &[0x04, 0x09, 0x53, 0x45, 0x4E, 0x44, 0x45, 0x52, 0x30, 0x30, 0x31];
-
-    // Feed data as it arrives
-    decoder.feed(data_chunk1);
-    decoder.feed(data_chunk2);
-
-    // Process decoded messages
-    while let Some(message) = decoder.decode_next()? {
-        println!("Received: {} from {}", 
-            message.msg_type(), 
-            message.sender_comp_id()
-        );
+    // Simulate feeding data in chunks (as would happen from network/file)
+    let chunk_size = test_messages.len() / 3; // Split into 3 chunks
+    for chunk in test_messages.chunks(chunk_size) {
+        decoder.feed(chunk);
+        
+        // Process any complete messages that have been decoded
+        while let Ok(Some(message)) = decoder.decode_next() {
+            println!("Received: {} from {} (seq: {})", 
+                message.msg_type(), 
+                message.sender_comp_id(),
+                message.msg_seq_num()
+            );
+        }
     }
     
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_streaming_example() {
+        streaming_example().expect("Streaming example should work");
+    }
 }
 ```
 
@@ -121,6 +153,16 @@ fn configuration_examples() {
     
     println!("Custom config max size: {} bytes", custom_config.max_message_size);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_configuration_examples() {
+        configuration_examples(); // Should run without panicking
+    }
+}
 ```
 
 ## Performance Considerations
@@ -142,7 +184,13 @@ RustyASN integrates with Simple Open Framing Header (SOFH) for message framing:
 
 ```rust
 use rustyasn::EncodingRule;
-use rustysofh::EncodingType;
+
+// SOFH encoding type enum for demonstration (would come from rustysofh crate)
+#[derive(Debug)]
+enum EncodingType {
+    Asn1BER,
+    Asn1OER,
+}
 
 fn sofh_integration_example(rule: EncodingRule) -> EncodingType {
     // SOFH encoding types for ASN.1
@@ -152,13 +200,22 @@ fn sofh_integration_example(rule: EncodingRule) -> EncodingType {
     }
 }
 
-// Usage example
 fn main() {
     let ber_encoding = sofh_integration_example(EncodingRule::BER);
     let oer_encoding = sofh_integration_example(EncodingRule::OER);
     
     println!("BER/DER uses: {:?}", ber_encoding);
     println!("OER uses: {:?}", oer_encoding);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sofh_integration() {
+        main(); // Should run without panicking
+    }
 }
 ```
 

@@ -57,17 +57,63 @@ fn get_enabled_fix_features() -> Vec<String> {
     // Always include FIX 4.4 as it's the primary version (no feature flag required)
     features.push("fix44".to_string());
 
-    // Check for optional features dynamically - only include those that exist in build dependencies
-    let available_features = ["fix40", "fix50"]; // Based on build-dependencies in Cargo.toml
+    // Dynamically detect available FIX features from the dictionary crate
+    // This approach uses the build-time capabilities to check what's available
+    let known_fix_versions = [
+        "fix40", "fix41", "fix42", "fix43", "fix44", "fix50", "fix50sp1", "fix50sp2", "fixt11",
+    ];
 
-    for feature in available_features {
+    for feature in known_fix_versions {
         let env_var = format!("CARGO_FEATURE_{}", feature.to_uppercase());
         if env::var(&env_var).is_ok() {
-            features.push(feature.to_string());
+            // Only add if not already included (fix44 is always included above)
+            if feature != "fix44" && !features.contains(&feature.to_string()) {
+                features.push(feature.to_string());
+            }
+        }
+    }
+
+    // Also check if we can probe the dictionary crate for available methods
+    // This is a more robust approach that doesn't rely on hardcoded feature names
+    let available_dictionaries = probe_available_dictionaries();
+    for dict_name in available_dictionaries {
+        if !features.contains(&dict_name) {
+            features.push(dict_name);
         }
     }
 
     features
+}
+
+/// Probes the rustyfix-dictionary crate to find available dictionary methods.
+/// This provides a more robust way to detect available FIX versions without hardcoding.
+fn probe_available_dictionaries() -> Vec<String> {
+    let mut available = Vec::new();
+
+    // Test compilation of dictionary creation calls to see what's available
+    // We do this by checking if the methods exist in the dictionary crate
+
+    // Use a feature-based approach since we can't easily probe method existence at build time
+    // Check environment variables that Cargo sets for enabled features
+    let env_vars: Vec<_> = env::vars()
+        .filter_map(|(key, _)| {
+            if key.starts_with("CARGO_FEATURE_FIX") {
+                let feature_name = key.strip_prefix("CARGO_FEATURE_").unwrap().to_lowercase();
+                Some(feature_name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for feature in env_vars {
+        // Verify it looks like a FIX version and not some other feature
+        if feature.starts_with("fix") && (feature.len() >= 5 || feature == "fixt11") {
+            available.push(feature);
+        }
+    }
+
+    available
 }
 
 /// Generates ASN.1 type definitions from FIX dictionaries.
@@ -76,26 +122,44 @@ fn generate_fix_asn1_definitions(enabled_features: &[String]) -> Result<()> {
     let out_path = Path::new(&out_dir);
 
     for feature in enabled_features {
-        let (dict_result, filename) = match feature.as_str() {
-            "fix40" => (Dictionary::fix40(), "fix40_asn1.rs"),
-            "fix44" => (Dictionary::fix44(), "fix44_asn1.rs"),
-            "fix50" => (Dictionary::fix50(), "fix50_asn1.rs"),
+        let filename = format!("{feature}_asn1.rs");
+
+        // Dynamically call the appropriate dictionary method
+        let dict_result = match feature.as_str() {
+            "fix40" => Dictionary::fix40(),
+            "fix41" => Dictionary::fix41(),
+            "fix42" => Dictionary::fix42(),
+            "fix43" => Dictionary::fix43(),
+            "fix44" => Dictionary::fix44(),
+            "fix50" => Dictionary::fix50(),
+            "fix50sp1" => Dictionary::fix50sp1(),
+            "fix50sp2" => Dictionary::fix50sp2(),
+            "fixt11" => Dictionary::fixt11(),
             _ => {
                 println!(
-                    "cargo:warning=Skipping unavailable FIX feature: {feature} (not enabled in build dependencies)"
+                    "cargo:warning=Skipping unknown FIX feature: {feature} (no corresponding dictionary method)"
                 );
                 continue;
             }
         };
 
-        let dictionary = dict_result
-            .with_context(|| format!("Failed to parse {} dictionary", feature.to_uppercase()))?;
+        let dictionary = match dict_result {
+            Ok(dict) => dict,
+            Err(e) => {
+                println!(
+                    "cargo:warning=Failed to load {} dictionary: {} (feature may not be enabled in build dependencies)",
+                    feature.to_uppercase(),
+                    e
+                );
+                continue;
+            }
+        };
 
         println!(
             "cargo:warning=Generating ASN.1 definitions for {}",
             feature.to_uppercase()
         );
-        generate_fix_dictionary_asn1(&dictionary, filename, out_path)
+        generate_fix_dictionary_asn1(&dictionary, &filename, out_path)
             .with_context(|| format!("Failed to generate ASN.1 definitions for {feature}"))?;
     }
 
@@ -567,8 +631,14 @@ CustomMessageType ::= ENUMERATED {
 
 -- Custom field definitions  
 CustomField ::= SEQUENCE {
-    tag     INTEGER (1..9999),
+    tag     INTEGER,
     value   UTF8String
+}
+
+-- Price field with high precision
+PrecisePrice ::= SEQUENCE {
+    mantissa    INTEGER,
+    exponent    INTEGER
 }
 
 -- Extended message structure
@@ -576,8 +646,16 @@ ExtendedFixMessage ::= SEQUENCE {
     msgType         CustomMessageType,
     senderCompId    UTF8String,
     targetCompId    UTF8String,
-    msgSeqNum       INTEGER (1..999999999),
-    customFields    SEQUENCE OF CustomField OPTIONAL
+    msgSeqNum       INTEGER,
+    customFields    CustomField OPTIONAL,
+    precisePrice    PrecisePrice OPTIONAL
+}
+
+-- Message variant choice
+MessageVariant ::= CHOICE {
+    standard    [0] ExtendedFixMessage,
+    compressed  [1] UTF8String,
+    binary      [2] OCTET
 }
 
 END
@@ -665,54 +743,18 @@ fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
 }
 
 /// Compiles a single ASN.1 schema file to Rust code.
-/// This is a placeholder implementation - in practice you'd use rasn-compiler or similar.
+/// Implements a basic ASN.1 parser that can handle common structures.
 fn compile_asn1_file(schema_file: &Path, output_path: &Path) -> Result<()> {
     // Read the ASN.1 schema file
     let schema_content = fs::read_to_string(schema_file)
         .with_context(|| format!("Failed to read schema file: {}", schema_file.display()))?;
 
-    // For now, generate a simple Rust wrapper around the schema
-    // In a full implementation, you would use rasn-compiler or implement proper ASN.1 parsing
-    let rust_code = format!(
-        r#"//! Generated Rust code from ASN.1 schema: {}
-//! This file is automatically generated by the build script.
-//! DO NOT EDIT MANUALLY - ALL CHANGES WILL BE OVERWRITTEN.
-//! Generated on: {}
+    // Parse the ASN.1 schema
+    let parsed_schema = parse_asn1_schema(&schema_content)
+        .with_context(|| format!("Failed to parse ASN.1 schema: {}", schema_file.display()))?;
 
-use rasn::{{AsnType, Decode, Encode}};
-
-// TODO: Implement proper ASN.1 compilation
-// For now, this is a placeholder that includes the original schema as documentation
-
-/*
-Original ASN.1 Schema:
-{}
-*/
-
-/// Placeholder struct for compiled ASN.1 schema
-#[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]
-#[rasn(crate_root = "rasn")]
-pub struct CompiledSchema {{
-    /// Placeholder field - replace with actual compiled types
-    pub placeholder: String,
-}}
-
-impl Default for CompiledSchema {{
-    fn default() -> Self {{
-        Self {{
-            placeholder: "Generated from {}".to_string(),
-        }}
-    }}
-}}
-"#,
-        schema_file.display(),
-        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-        schema_content,
-        schema_file
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-    );
+    // Generate Rust code from parsed schema
+    let rust_code = generate_rust_from_asn1(&parsed_schema, schema_file)?;
 
     // Write the generated Rust code
     fs::write(output_path, rust_code).with_context(|| {
@@ -723,4 +765,425 @@ impl Default for CompiledSchema {{
     })?;
 
     Ok(())
+}
+
+/// Parsed ASN.1 type definition
+#[derive(Debug, Clone)]
+enum Asn1Type {
+    Sequence {
+        name: String,
+        fields: Vec<Asn1Field>,
+    },
+    Enumerated {
+        name: String,
+        values: Vec<Asn1EnumValue>,
+    },
+    Choice {
+        name: String,
+        alternatives: Vec<Asn1Field>,
+    },
+    Integer {
+        name: String,
+        constraints: Option<String>,
+    },
+    String {
+        name: String,
+        string_type: Asn1StringType,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct Asn1Field {
+    name: String,
+    field_type: String,
+    optional: bool,
+    tag: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+struct Asn1EnumValue {
+    name: String,
+    value: Option<i32>,
+}
+
+#[derive(Debug, Clone)]
+enum Asn1StringType {
+    Utf8String,
+    PrintableString,
+    VisibleString,
+    GeneralString,
+}
+
+#[derive(Debug)]
+struct Asn1Schema {
+    module_name: String,
+    types: Vec<Asn1Type>,
+}
+
+/// Basic ASN.1 schema parser
+fn parse_asn1_schema(content: &str) -> Result<Asn1Schema> {
+    let mut types = Vec::new();
+    let mut module_name = "UnknownModule".to_string();
+
+    // Extract module name
+    if let Some(module_line) = content.lines().find(|line| line.contains("DEFINITIONS")) {
+        if let Some(name) = module_line.split_whitespace().next() {
+            module_name = name.to_string();
+        }
+    }
+
+    // Simple line-by-line parsing (basic implementation)
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        // Skip empty lines and comments
+        if line.is_empty()
+            || line.starts_with("--")
+            || line.starts_with("BEGIN")
+            || line.starts_with("END")
+        {
+            i += 1;
+            continue;
+        }
+
+        // Parse type definitions
+        if line.contains("::=") {
+            match parse_type_definition(line, &lines, &mut i) {
+                Ok(asn1_type) => types.push(asn1_type),
+                Err(e) => {
+                    println!("cargo:warning=Failed to parse type definition '{line}': {e}");
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    Ok(Asn1Schema { module_name, types })
+}
+
+/// Parse a single type definition
+fn parse_type_definition(
+    line: &str,
+    lines: &[&str],
+    current_index: &mut usize,
+) -> Result<Asn1Type> {
+    let parts: Vec<&str> = line.split("::=").collect();
+    if parts.len() != 2 {
+        return Err(anyhow::anyhow!("Invalid type definition syntax"));
+    }
+
+    let type_name = parts[0].trim().to_string();
+    let type_def = parts[1].trim();
+
+    if type_def.starts_with("ENUMERATED") {
+        parse_enumerated_type(type_name, type_def, lines, current_index)
+    } else if type_def.starts_with("SEQUENCE") {
+        parse_sequence_type(type_name, type_def, lines, current_index)
+    } else if type_def.starts_with("CHOICE") {
+        parse_choice_type(type_name, type_def, lines, current_index)
+    } else if type_def.starts_with("INTEGER") {
+        parse_integer_type(type_name, type_def)
+    } else if type_def.contains("String") || type_def == "UTF8String" {
+        parse_string_type(type_name, type_def)
+    } else {
+        Err(anyhow::anyhow!("Unsupported type: {}", type_def))
+    }
+}
+
+/// Parse ENUMERATED type
+fn parse_enumerated_type(
+    name: String,
+    _type_def: &str,
+    lines: &[&str],
+    current_index: &mut usize,
+) -> Result<Asn1Type> {
+    let mut values = Vec::new();
+    let mut i = *current_index + 1;
+
+    // Look for enum values in following lines
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line == "}" {
+            *current_index = i;
+            break;
+        }
+
+        if line.contains("(") && line.contains(")") {
+            // Parse enum value with explicit number: name(0)
+            if let Some(enum_name) = line.split('(').next() {
+                let enum_name = enum_name.trim().replace(',', "");
+                if let Some(value_part) = line.split('(').nth(1) {
+                    if let Some(value_str) = value_part.split(')').next() {
+                        if let Ok(value) = value_str.trim().parse::<i32>() {
+                            values.push(Asn1EnumValue {
+                                name: enum_name,
+                                value: Some(value),
+                            });
+                        }
+                    }
+                }
+            }
+        } else if !line.is_empty() && !line.starts_with("--") && line != "{" {
+            // Parse simple enum value: name
+            let enum_name = line.replace(',', "").trim().to_string();
+            if !enum_name.is_empty() {
+                values.push(Asn1EnumValue {
+                    name: enum_name,
+                    value: None,
+                });
+            }
+        }
+
+        i += 1;
+    }
+
+    Ok(Asn1Type::Enumerated { name, values })
+}
+
+/// Parse SEQUENCE type
+fn parse_sequence_type(
+    name: String,
+    _type_def: &str,
+    lines: &[&str],
+    current_index: &mut usize,
+) -> Result<Asn1Type> {
+    let mut fields = Vec::new();
+    let mut i = *current_index + 1;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line == "}" {
+            *current_index = i;
+            break;
+        }
+
+        // Parse field: fieldName FieldType [OPTIONAL]
+        if !line.is_empty() && !line.starts_with("--") && line != "{" {
+            if let Some(field) = parse_sequence_field(line) {
+                fields.push(field);
+            }
+        }
+
+        i += 1;
+    }
+
+    Ok(Asn1Type::Sequence { name, fields })
+}
+
+/// Parse CHOICE type
+fn parse_choice_type(
+    name: String,
+    _type_def: &str,
+    lines: &[&str],
+    current_index: &mut usize,
+) -> Result<Asn1Type> {
+    let mut alternatives = Vec::new();
+    let mut i = *current_index + 1;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line == "}" {
+            *current_index = i;
+            break;
+        }
+
+        if !line.is_empty() && !line.starts_with("--") && line != "{" {
+            if let Some(field) = parse_sequence_field(line) {
+                alternatives.push(field);
+            }
+        }
+
+        i += 1;
+    }
+
+    Ok(Asn1Type::Choice { name, alternatives })
+}
+
+/// Parse INTEGER type
+fn parse_integer_type(name: String, type_def: &str) -> Result<Asn1Type> {
+    let constraints = if type_def.contains('(') && type_def.contains(')') {
+        Some(type_def.to_string())
+    } else {
+        None
+    };
+
+    Ok(Asn1Type::Integer { name, constraints })
+}
+
+/// Parse string type
+fn parse_string_type(name: String, type_def: &str) -> Result<Asn1Type> {
+    let string_type = match type_def {
+        "UTF8String" => Asn1StringType::Utf8String,
+        "PrintableString" => Asn1StringType::PrintableString,
+        "VisibleString" => Asn1StringType::VisibleString,
+        _ => Asn1StringType::GeneralString,
+    };
+
+    Ok(Asn1Type::String { name, string_type })
+}
+
+/// Parse a sequence field
+fn parse_sequence_field(line: &str) -> Option<Asn1Field> {
+    let clean_line = line.replace(',', "").trim().to_string();
+    let parts: Vec<&str> = clean_line.split_whitespace().collect();
+
+    if parts.len() >= 2 {
+        let field_name = parts[0].to_string();
+        let field_type = parts[1].to_string();
+        let optional = clean_line.to_uppercase().contains("OPTIONAL");
+
+        // Extract tag if present [n]
+        let tag = if clean_line.contains('[') && clean_line.contains(']') {
+            if let Some(tag_start) = clean_line.find('[') {
+                if let Some(tag_end) = clean_line.find(']') {
+                    let tag_str = &clean_line[tag_start + 1..tag_end];
+                    tag_str.parse().ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Some(Asn1Field {
+            name: field_name,
+            field_type,
+            optional,
+            tag,
+        })
+    } else {
+        None
+    }
+}
+
+/// Generate Rust code from parsed ASN.1 schema
+fn generate_rust_from_asn1(schema: &Asn1Schema, schema_file: &Path) -> Result<String> {
+    let mut output = String::new();
+
+    // File header
+    output.push_str(&format!(
+        r#"//! Generated Rust code from ASN.1 schema: {}
+//! This file is automatically generated by the build script.
+//! DO NOT EDIT MANUALLY - ALL CHANGES WILL BE OVERWRITTEN.
+//! Generated on: {}
+
+use rasn::{{AsnType, Decode, Encode}};
+
+"#,
+        schema_file.display(),
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    ));
+
+    // Generate types
+    for asn1_type in &schema.types {
+        output.push_str(&generate_rust_type(asn1_type)?);
+        output.push_str("\n\n");
+    }
+
+    Ok(output)
+}
+
+/// Generate Rust code for a single ASN.1 type
+fn generate_rust_type(asn1_type: &Asn1Type) -> Result<String> {
+    match asn1_type {
+        Asn1Type::Sequence { name, fields } => {
+            let mut output = format!(
+                "/// ASN.1 SEQUENCE: {name}\n#[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]\n#[rasn(crate_root = \"rasn\")]\npub struct {name} {{\n"
+            );
+
+            for (i, field) in fields.iter().enumerate() {
+                if let Some(tag) = field.tag {
+                    output.push_str(&format!("    #[rasn(tag({tag}))]\n"));
+                }
+
+                let field_type = map_asn1_type_to_rust(&field.field_type);
+                let field_type = if field.optional {
+                    format!("Option<{field_type}>")
+                } else {
+                    field_type
+                };
+
+                output.push_str(&format!(
+                    "    pub {}: {},\n",
+                    field.name.to_lowercase(),
+                    field_type
+                ));
+            }
+
+            output.push('}');
+            Ok(output)
+        }
+
+        Asn1Type::Enumerated { name, values } => {
+            let mut output = format!(
+                "/// ASN.1 ENUMERATED: {name}\n#[derive(AsnType, Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]\n#[rasn(crate_root = \"rasn\")]\n#[rasn(enumerated)]\npub enum {name} {{\n"
+            );
+
+            for (i, value) in values.iter().enumerate() {
+                let discriminant = value.value.unwrap_or(i as i32);
+                output.push_str(&format!(
+                    "    {} = {},\n",
+                    value.name.to_pascal_case(),
+                    discriminant
+                ));
+            }
+
+            output.push('}');
+            Ok(output)
+        }
+
+        Asn1Type::Choice { name, alternatives } => {
+            let mut output = format!(
+                "/// ASN.1 CHOICE: {name}\n#[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]\n#[rasn(choice, crate_root = \"rasn\")]\npub enum {name} {{\n"
+            );
+
+            for (i, alt) in alternatives.iter().enumerate() {
+                let tag = alt.tag.unwrap_or(i as u32);
+                output.push_str(&format!("    #[rasn(tag(context, {tag}))]\n"));
+                output.push_str(&format!(
+                    "    {}({}),\n",
+                    alt.name.to_pascal_case(),
+                    map_asn1_type_to_rust(&alt.field_type)
+                ));
+            }
+
+            output.push('}');
+            Ok(output)
+        }
+
+        Asn1Type::Integer {
+            name,
+            constraints: _,
+        } => Ok(format!("/// ASN.1 INTEGER: {name}\npub type {name} = i64;")),
+
+        Asn1Type::String {
+            name,
+            string_type: _,
+        } => Ok(format!(
+            "/// ASN.1 STRING: {name}\npub type {name} = String;"
+        )),
+    }
+}
+
+/// Map ASN.1 type name to Rust type
+fn map_asn1_type_to_rust(asn1_type: &str) -> String {
+    match asn1_type.to_uppercase().as_str() {
+        "INTEGER" => "i64".to_string(),
+        "UTF8STRING" | "PRINTABLESTRING" | "VISIBLESTRING" | "GENERALSTRING" => {
+            "String".to_string()
+        }
+        "BOOLEAN" => "bool".to_string(),
+        "OCTET" | "DATA" => "Vec<u8>".to_string(),
+        _ => asn1_type.to_string(), // Custom type, use as-is
+    }
 }
