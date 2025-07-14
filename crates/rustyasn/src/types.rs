@@ -1,5 +1,6 @@
 //! ASN.1 type definitions and FIX field mappings.
 
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use rasn::{AsnType, Decode, Encode};
 use rust_decimal::Decimal;
 use smartstring::{LazyCompact, SmartString};
@@ -160,25 +161,26 @@ impl FixFieldValue {
             return FixFieldValue::Character(s);
         }
 
-        // Check for timestamp format (YYYYMMDD-HH:MM:SS[.sss])
-        if s.len() >= 17
-            && s.chars().nth(8) == Some('-')
-            && s.chars().nth(11) == Some(':')
-            && s.chars().nth(14) == Some(':')
-        {
+        // Check for timestamp format (YYYYMMDD-HH:MM:SS[.sss]) using chrono
+        if NaiveDateTime::parse_from_str(&s, "%Y%m%d-%H:%M:%S").is_ok() {
+            return FixFieldValue::UtcTimestamp(s);
+        }
+        // Also check for timestamp with milliseconds
+        if NaiveDateTime::parse_from_str(&s, "%Y%m%d-%H:%M:%S%.3f").is_ok() {
             return FixFieldValue::UtcTimestamp(s);
         }
 
-        // Check for date format (YYYYMMDD)
-        if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
+        // Check for date format (YYYYMMDD) using chrono
+        if s.len() == 8 && NaiveDate::parse_from_str(&s, "%Y%m%d").is_ok() {
             return FixFieldValue::UtcDate(s);
         }
 
-        // Check for time format (HH:MM:SS[.sss])
-        if (s.len() == 8 || s.len() == 12)
-            && s.chars().nth(2) == Some(':')
-            && s.chars().nth(5) == Some(':')
-        {
+        // Check for time format (HH:MM:SS[.sss]) using chrono
+        if NaiveTime::parse_from_str(&s, "%H:%M:%S").is_ok() {
+            return FixFieldValue::UtcTime(s);
+        }
+        // Also check for time with milliseconds
+        if NaiveTime::parse_from_str(&s, "%H:%M:%S%.3f").is_ok() {
             return FixFieldValue::UtcTime(s);
         }
 
