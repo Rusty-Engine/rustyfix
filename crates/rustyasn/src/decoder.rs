@@ -99,7 +99,17 @@ impl DecodedMessage {
     pub fn get_int(&self, tag: u32) -> Result<Option<i64>> {
         match self.fields.get(&tag) {
             Some(crate::types::FixFieldValue::Integer(i)) => Ok(Some(*i)),
-            Some(crate::types::FixFieldValue::UnsignedInteger(u)) => Ok(Some(*u as i64)),
+            Some(crate::types::FixFieldValue::UnsignedInteger(u)) => {
+                // Check for overflow when converting u64 to i64
+                if i64::try_from(*u).is_ok() {
+                    Ok(Some(*u as i64))
+                } else {
+                    Err(Error::Decode(DecodeError::ConstraintViolation {
+                        field: format!("Tag {tag}").into(),
+                        reason: "Unsigned integer value exceeds i64::MAX and cannot be converted to signed integer".into(),
+                    }))
+                }
+            }
             Some(field_value) => {
                 // Try to parse the string representation of the field value
                 field_value.to_string().parse().map(Some).map_err(|_| {
@@ -574,6 +584,45 @@ mod tests {
             int_err,
             Err(Error::Decode(DecodeError::ConstraintViolation { .. }))
         ));
+
+        // Test overflow protection
+        let overflow_msg = crate::types::FixMessage {
+            msg_type: "D".to_string(),
+            sender_comp_id: "SENDER".to_string(),
+            target_comp_id: "TARGET".to_string(),
+            msg_seq_num: 1,
+            fields: vec![crate::types::Field {
+                tag: 999,
+                value: crate::types::FixFieldValue::UnsignedInteger(u64::MAX), // Value > i64::MAX
+            }],
+        };
+        let message_with_overflow = DecodedMessage::new(Bytes::new(), overflow_msg);
+
+        let overflow_err = message_with_overflow.get_int(999);
+        assert!(matches!(
+            overflow_err,
+            Err(Error::Decode(DecodeError::ConstraintViolation { .. }))
+        ));
+
+        // Test maximum valid conversion (i64::MAX as u64 should work)
+        let max_valid_msg = crate::types::FixMessage {
+            msg_type: "D".to_string(),
+            sender_comp_id: "SENDER".to_string(),
+            target_comp_id: "TARGET".to_string(),
+            msg_seq_num: 1,
+            fields: vec![crate::types::Field {
+                tag: 1000,
+                value: crate::types::FixFieldValue::UnsignedInteger(i64::MAX as u64),
+            }],
+        };
+        let message_with_max_valid = DecodedMessage::new(Bytes::new(), max_valid_msg);
+
+        assert_eq!(
+            message_with_max_valid
+                .get_int(1000)
+                .expect("Should convert i64::MAX"),
+            Some(i64::MAX)
+        );
 
         // Test negative to unsigned conversion error
         let uint_err = message.get_uint(99);
