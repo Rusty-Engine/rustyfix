@@ -37,15 +37,8 @@ categories = [
     "network-programming",
     "parser-implementations",
     "encoding",
-    "fix-engine",
-    "fix-parser",
-    "fix-protocol",
-    "quickfix",
-    "fast",
-    "trading",
-    "protocol",
-    "hft",
-    "high-frequency-trading",
+    "finance",
+    "development-tools",
 ]
 license = "Apache-2.0"
 
