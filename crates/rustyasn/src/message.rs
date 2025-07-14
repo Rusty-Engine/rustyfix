@@ -75,7 +75,7 @@ impl Message {
 
         // Add additional fields
         for field in &fix_msg.fields {
-            message.set_field(u32::from(field.tag), field.value.as_bytes().to_vec());
+            message.set_field(field.tag, field.value.as_bytes().to_vec());
         }
 
         Some(message)
