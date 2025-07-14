@@ -320,7 +320,8 @@ mod tests {
 
     #[test]
     fn test_message_creation() {
-        let msg_type = FixMessageType::from_str("D").unwrap();
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
         let message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
 
         assert_eq!(message.msg_type, msg_type);
@@ -331,25 +332,35 @@ mod tests {
 
     #[test]
     fn test_field_map_implementation() {
-        let msg_type = FixMessageType::from_str("D").unwrap();
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
         let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
 
         // Set a custom field
         message.set_field(55, b"EUR/USD".to_vec());
 
         // Test field access
-        let symbol: Asn1String = message.get(55).unwrap();
+        let symbol: Asn1String = message
+            .get(55)
+            .expect("Symbol field (55) should be present in test message");
         assert_eq!(symbol.as_str(), "EUR/USD");
 
         // Test missing field
         assert!(message.get_raw(999).is_none());
 
         // Test optional field access
-        let symbol_opt: Option<Asn1String> = message.get_opt(55).unwrap();
+        let symbol_opt: Option<Asn1String> = message
+            .get_opt(55)
+            .expect("get_opt should not fail for valid field access");
         assert!(symbol_opt.is_some());
-        assert_eq!(symbol_opt.unwrap().as_str(), "EUR/USD");
+        assert_eq!(
+            symbol_opt.expect("Symbol should be present").as_str(),
+            "EUR/USD"
+        );
 
-        let missing_opt: Option<Asn1String> = message.get_opt(999).unwrap();
+        let missing_opt: Option<Asn1String> = message
+            .get_opt(999)
+            .expect("get_opt should not fail even for missing fields");
         assert!(missing_opt.is_none());
     }
 
@@ -372,7 +383,8 @@ mod tests {
             ],
         };
 
-        let message = Message::from_fix_message(&fix_msg).unwrap();
+        let message = Message::from_fix_message(&fix_msg)
+            .expect("Failed to convert valid FIX message to ASN.1 message");
 
         // Check standard fields
         assert_eq!(message.msg_type.as_str(), "D");
@@ -381,16 +393,21 @@ mod tests {
         assert_eq!(message.msg_seq_num, 123);
 
         // Check custom fields
-        let symbol: Asn1String = message.get(55).unwrap();
+        let symbol: Asn1String = message
+            .get(55)
+            .expect("Symbol field (55) should be present in converted message");
         assert_eq!(symbol.as_str(), "EUR/USD");
 
-        let side: Asn1String = message.get(54).unwrap();
+        let side: Asn1String = message
+            .get(54)
+            .expect("Side field (54) should be present in converted message");
         assert_eq!(side.as_str(), "1");
     }
 
     #[test]
     fn test_conversion_to_fix_message() {
-        let msg_type = FixMessageType::from_str("D").unwrap();
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
         let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
 
         message.set_field(55, b"EUR/USD".to_vec());
@@ -405,38 +422,59 @@ mod tests {
         assert_eq!(fix_msg.fields.len(), 2);
 
         // Find fields
-        let symbol_field = fix_msg.fields.iter().find(|f| f.tag == 55).unwrap();
+        let symbol_field = fix_msg
+            .fields
+            .iter()
+            .find(|f| f.tag == 55)
+            .expect("Symbol field should exist in converted message");
         assert_eq!(symbol_field.value, "EUR/USD");
 
-        let side_field = fix_msg.fields.iter().find(|f| f.tag == 54).unwrap();
+        let side_field = fix_msg
+            .fields
+            .iter()
+            .find(|f| f.tag == 54)
+            .expect("Side field should exist in converted message");
         assert_eq!(side_field.value, "1");
     }
 
     #[test]
     fn test_helper_methods() {
-        let msg_type = FixMessageType::from_str("D").unwrap();
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
         let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
 
         message.set_field(55, b"EUR/USD".to_vec());
 
         // Test helper methods
-        let msg_type_result = message.message_type().unwrap();
+        let msg_type_result = message
+            .message_type()
+            .expect("Message type should be accessible in test message");
         assert_eq!(msg_type_result.as_str(), "D");
 
-        let sender = message.sender_company_id().unwrap();
+        let sender = message
+            .sender_company_id()
+            .expect("Sender company ID should be accessible in test message");
         assert_eq!(sender.as_str(), "SENDER");
 
-        let symbol = message.symbol().unwrap();
+        let symbol = message
+            .symbol()
+            .expect("Symbol should be accessible in test message");
         assert!(symbol.is_some());
-        assert_eq!(symbol.unwrap().as_str(), "EUR/USD");
+        assert_eq!(
+            symbol.expect("Symbol should be present").as_str(),
+            "EUR/USD"
+        );
 
-        let missing = message.price().unwrap();
+        let missing = message
+            .price()
+            .expect("price() method should not fail even when field is missing");
         assert!(missing.is_none());
     }
 
     #[test]
     fn test_message_group() {
-        let msg_type = FixMessageType::from_str("D").unwrap();
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
         let message1 = Message::new(msg_type, "SENDER1".to_string(), "TARGET1".to_string(), 1);
         let message2 = Message::new(msg_type, "SENDER2".to_string(), "TARGET2".to_string(), 2);
 
@@ -446,10 +484,14 @@ mod tests {
         assert_eq!(group.len(), 2);
         assert!(!group.is_empty());
 
-        let entry1 = group.get(0).unwrap();
+        let entry1 = group
+            .get(0)
+            .expect("First group entry should exist in test");
         assert_eq!(entry1.sender_comp_id, "SENDER1");
 
-        let entry2 = group.get(1).unwrap();
+        let entry2 = group
+            .get(1)
+            .expect("Second group entry should exist in test");
         assert_eq!(entry2.sender_comp_id, "SENDER2");
 
         assert!(group.get(2).is_none());

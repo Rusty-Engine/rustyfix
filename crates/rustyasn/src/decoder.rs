@@ -360,7 +360,8 @@ mod tests {
     #[test]
     fn test_decoder_creation() {
         let config = Config::default();
-        let dict = Arc::new(Dictionary::fix44().unwrap());
+        let dict =
+            Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
         let decoder = Decoder::new(config, dict);
 
         // Test with empty data
@@ -392,7 +393,8 @@ mod tests {
     #[test]
     fn test_streaming_decoder_state() {
         let config = Config::default();
-        let dict = Arc::new(Dictionary::fix44().unwrap());
+        let dict =
+            Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
         let mut decoder = DecoderStreaming::new(config, dict);
 
         assert_eq!(decoder.buffered_bytes(), 0);

@@ -355,23 +355,29 @@ mod tests {
 
     #[test]
     fn test_schema_creation() {
-        let dict = Arc::new(Dictionary::fix44().unwrap());
+        let dict =
+            Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
         let schema = Schema::new(dict);
 
         // Check header fields
-        let field_8 = schema.get_field_type(8).unwrap();
+        let field_8 = schema
+            .get_field_type(8)
+            .expect("Field 8 should exist in FIX 4.4 dictionary");
         assert_eq!(field_8.fix_type, FixDataType::String);
         assert!(field_8.in_header);
 
         // Check message schemas
-        let logon = schema.get_message_schema("A").unwrap();
+        let logon = schema
+            .get_message_schema("A")
+            .expect("Logon message should exist in FIX 4.4 dictionary");
         assert_eq!(logon.msg_type, "A");
         assert!(logon.required_fields.contains(&98)); // EncryptMethod
     }
 
     #[test]
     fn test_field_type_mapping() {
-        let dict = Arc::new(Dictionary::fix44().unwrap());
+        let dict =
+            Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
         let mut schema = Schema::new(dict);
 
         // Test boolean mapping
@@ -384,10 +390,14 @@ mod tests {
             },
         );
 
-        let result = schema.map_field_type(1000, b"Y").unwrap();
+        let result = schema
+            .map_field_type(1000, b"Y")
+            .expect("Field mapping should not fail in test");
         assert_eq!(result, "Y");
 
-        let result = schema.map_field_type(1000, b"N").unwrap();
+        let result = schema
+            .map_field_type(1000, b"N")
+            .expect("Field mapping should not fail in test");
         assert_eq!(result, "N");
     }
 }

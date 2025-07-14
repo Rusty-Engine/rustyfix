@@ -199,7 +199,9 @@ mod tests {
         };
 
         config.set_message_options("NewOrderSingle", options.clone());
-        let retrieved = config.get_message_options("NewOrderSingle").unwrap();
+        let retrieved = config
+            .get_message_options("NewOrderSingle")
+            .expect("Failed to retrieve message options for test");
         assert_eq!(retrieved.encoding_rule, Some(EncodingRule::OER));
         assert!(retrieved.compress);
     }

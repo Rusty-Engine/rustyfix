@@ -426,11 +426,13 @@ mod tests {
         assert_eq!(&buffer[..], b"Hello World");
 
         // Test deserialization
-        let deserialized = Asn1String::deserialize(b"Test String").unwrap();
+        let deserialized = Asn1String::deserialize(b"Test String")
+            .expect("Failed to deserialize valid UTF-8 string");
         assert_eq!(deserialized.as_str(), "Test String");
 
         // Test lossy deserialization with invalid UTF-8
-        let lossy = Asn1String::deserialize_lossy(b"Valid UTF-8").unwrap();
+        let lossy = Asn1String::deserialize_lossy(b"Valid UTF-8")
+            .expect("Lossy deserialization should not fail");
         assert_eq!(lossy.as_str(), "Valid UTF-8");
     }
 
@@ -452,11 +454,13 @@ mod tests {
         assert_eq!(&buffer[..], b"-123");
 
         // Test deserialization
-        let deserialized = Asn1Integer::deserialize(b"456").unwrap();
+        let deserialized =
+            Asn1Integer::deserialize(b"456").expect("Failed to deserialize valid integer");
         assert_eq!(deserialized.value(), 456);
 
         // Test lossy deserialization
-        let lossy = Asn1Integer::deserialize_lossy(b"789abc").unwrap();
+        let lossy = Asn1Integer::deserialize_lossy(b"789abc")
+            .expect("Lossy integer deserialization should not fail");
         assert_eq!(lossy.value(), 789);
     }
 
@@ -471,11 +475,12 @@ mod tests {
         assert_eq!(&buffer[..], b"123");
 
         // Test deserialization
-        let deserialized = Asn1UInteger::deserialize(b"456").unwrap();
+        let deserialized = Asn1UInteger::deserialize(b"456")
+            .expect("Failed to deserialize valid unsigned integer");
         assert_eq!(deserialized.value(), 456);
 
         // Test conversion
-        let as_u32: u32 = deserialized.try_into().unwrap();
+        let as_u32: u32 = deserialized.try_into().expect("Failed to convert to u32");
         assert_eq!(as_u32, 456);
     }
 
@@ -496,14 +501,38 @@ mod tests {
         assert_eq!(&buffer[..], b"N");
 
         // Test deserialization
-        assert!(Asn1Boolean::deserialize(b"Y").unwrap().value());
-        assert!(Asn1Boolean::deserialize(b"1").unwrap().value());
-        assert!(!Asn1Boolean::deserialize(b"N").unwrap().value());
-        assert!(!Asn1Boolean::deserialize(b"0").unwrap().value());
+        assert!(
+            Asn1Boolean::deserialize(b"Y")
+                .expect("Failed to deserialize 'Y' as boolean")
+                .value()
+        );
+        assert!(
+            Asn1Boolean::deserialize(b"1")
+                .expect("Failed to deserialize '1' as boolean")
+                .value()
+        );
+        assert!(
+            !Asn1Boolean::deserialize(b"N")
+                .expect("Failed to deserialize 'N' as boolean")
+                .value()
+        );
+        assert!(
+            !Asn1Boolean::deserialize(b"0")
+                .expect("Failed to deserialize '0' as boolean")
+                .value()
+        );
 
         // Test lossy deserialization
-        assert!(Asn1Boolean::deserialize_lossy(b"Yes").unwrap().value());
-        assert!(!Asn1Boolean::deserialize_lossy(b"No").unwrap().value());
+        assert!(
+            Asn1Boolean::deserialize_lossy(b"Yes")
+                .expect("Lossy boolean deserialization should not fail")
+                .value()
+        );
+        assert!(
+            !Asn1Boolean::deserialize_lossy(b"No")
+                .expect("Lossy boolean deserialization should not fail")
+                .value()
+        );
     }
 
     #[test]
@@ -518,7 +547,7 @@ mod tests {
         assert_eq!(&buffer[..], &data[..]);
 
         // Test deserialization
-        let deserialized = Asn1Bytes::deserialize(&data).unwrap();
+        let deserialized = Asn1Bytes::deserialize(&data).expect("Failed to deserialize byte array");
         assert_eq!(deserialized.as_bytes(), &data[..]);
     }
 }

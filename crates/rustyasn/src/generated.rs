@@ -30,10 +30,16 @@ mod tests {
     #[test]
     fn test_message_type_conversion() {
         // Test conversion from string
-        assert_eq!(FixMessageType::from_str("D").unwrap().as_str(), "D");
+        assert_eq!(
+            FixMessageType::from_str("D")
+                .expect("Failed to parse valid message type 'D'")
+                .as_str(),
+            "D"
+        );
 
         // Test conversion to string
-        let msg_type = FixMessageType::from_str("8").unwrap();
+        let msg_type =
+            FixMessageType::from_str("8").expect("Failed to parse valid message type '8'");
         assert_eq!(msg_type.as_str(), "8");
 
         // Test invalid message type
@@ -66,7 +72,8 @@ mod tests {
         };
 
         // Convert to ASN.1 format
-        let asn1_msg = Asn1FixMessage::from_fix_message(&fix_msg).unwrap();
+        let asn1_msg = Asn1FixMessage::from_fix_message(&fix_msg)
+            .expect("Failed to convert valid FIX message to ASN.1");
         assert_eq!(asn1_msg.msg_type.as_str(), "D");
         assert_eq!(asn1_msg.sender_comp_id, "SENDER");
         assert_eq!(asn1_msg.msg_seq_num, 123);
