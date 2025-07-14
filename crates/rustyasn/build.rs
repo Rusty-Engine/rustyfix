@@ -227,10 +227,10 @@ fn generate_fix_asn1_definitions(enabled_features: &[String]) -> Result<()> {
             }
         };
 
-        println!(
-            "cargo:warning=Generating ASN.1 definitions for {}",
-            feature.to_uppercase()
-        );
+        // println!(
+        //     "cargo:warning=Generating ASN.1 definitions for {}",
+        //     feature.to_uppercase()
+        // );
         generate_fix_dictionary_asn1(&dictionary, &filename, out_path)
             .with_context(|| format!("Failed to generate ASN.1 definitions for {feature}"))?;
     }
@@ -770,10 +770,10 @@ fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
             for entry in entries {
                 let schema_file = entry.context("Failed to read schema file entry")?;
 
-                println!(
-                    "cargo:warning=Compiling ASN.1 schema: {}",
-                    schema_file.display()
-                );
+                // println!(
+                //     "cargo:warning=Compiling ASN.1 schema: {}",
+                //     schema_file.display()
+                // );
 
                 // Get the filename without extension for generated Rust module
                 let file_stem = schema_file
