@@ -97,12 +97,12 @@ mod tests {
 
         let message = FixMessage::new_order_single("BTCUSD".into(), 1000.0, 100.0, "BUY".into());
 
-        let encoded = encoder
-            .encode(&message)
-            .map_err(|e| format!("Encoding should work but failed: {e}"))?;
-        let decoded = decoder
-            .decode(&encoded)
-            .map_err(|e| format!("Decoding should work but failed: {e}"))?;
+        let encoded = encoder.encode(&message).map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Encoding should work but failed: {e}"))
+        })?;
+        let decoded = decoder.decode(&encoded).map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Decoding should work but failed: {e}"))
+        })?;
 
         assert_eq!(message, decoded);
         Ok(())

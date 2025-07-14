@@ -198,9 +198,9 @@ mod test {
     fn v1_acceptor_is_ok() -> Result<(), Box<dyn std::error::Error>> {
         use super::*;
 
-        FixOverTlsV10
-            .recommended_acceptor_builder()
-            .map_err(|e| format!("Failed to create acceptor builder: {e}"))?;
+        FixOverTlsV10.recommended_acceptor_builder().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Failed to create acceptor builder: {e}"))
+        })?;
         Ok(())
     }
 
@@ -209,9 +209,9 @@ mod test {
     fn v1_connector_is_ok() -> Result<(), Box<dyn std::error::Error>> {
         use super::*;
 
-        FixOverTlsV10
-            .recommended_connector_builder()
-            .map_err(|e| format!("Failed to create connector builder: {e}"))?;
+        FixOverTlsV10.recommended_connector_builder().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Failed to create connector builder: {e}"))
+        })?;
         Ok(())
     }
 }

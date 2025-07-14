@@ -143,7 +143,9 @@ mod integration_tests {
         assert_eq!(read_u64, 999);
 
         // Variable data would be processed by generated code
-        assert!(message.len() > 8 + 8); // Header + fixed field + variable data
+        const HEADER_SIZE: usize = 8;
+        const FIXED_FIELD_SIZE: usize = 8;
+        assert!(message.len() > HEADER_SIZE + FIXED_FIELD_SIZE); // Header + fixed field + variable data
         Ok(())
     }
 

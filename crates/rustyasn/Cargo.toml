@@ -53,10 +53,10 @@ env_logger = { workspace = true }
 
 [features]
 default = []
-serde = ["dep:serde"]
-tracing = ["dep:fastrace"]
-fix40 = ["rustyfix-dictionary/fix40"]
-fix50 = ["rustyfix-dictionary/fix50"]
+serde = [ "dep:serde" ]
+tracing = [ "dep:fastrace" ]
+fix40 = [ "rustyfix-dictionary/fix40" ]
+fix50 = [ "rustyfix-dictionary/fix50" ]
 
 [build-dependencies]
 # For code generation from ASN.1 schemas and FIX dictionaries

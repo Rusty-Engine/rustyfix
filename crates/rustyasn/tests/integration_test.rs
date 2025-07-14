@@ -27,14 +27,14 @@ fn test_basic_encoding_decoding() -> Result<(), Box<dyn std::error::Error>> {
             .add_int(54, 1) // Side (1=Buy)
             .add_uint(38, 1_000_000); // OrderQty
 
-        let encoded = handle
-            .encode()
-            .map_err(|e| format!("Encoding should succeed but failed: {e}"))?;
+        let encoded = handle.encode().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Encoding should succeed but failed: {e}"))
+        })?;
 
         // Decode the message
-        let decoded = decoder
-            .decode(&encoded)
-            .map_err(|e| format!("Decoding should succeed but failed: {e}"))?;
+        let decoded = decoder.decode(&encoded).map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Decoding should succeed but failed: {e}"))
+        })?;
 
         // Verify standard fields
         assert_eq!(decoded.msg_type(), "D");
@@ -46,14 +46,14 @@ fn test_basic_encoding_decoding() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(decoded.get_string(11), Some("CL001".to_string()));
         assert_eq!(decoded.get_string(55), Some("EUR/USD".to_string()));
 
-        let parsed_int = decoded
-            .get_int(54)
-            .map_err(|e| format!("Should parse int but failed: {e}"))?;
+        let parsed_int = decoded.get_int(54).map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Should parse int but failed: {e}"))
+        })?;
         assert_eq!(parsed_int, Some(1));
 
-        let parsed_uint = decoded
-            .get_uint(38)
-            .map_err(|e| format!("Should parse uint but failed: {e}"))?;
+        let parsed_uint = decoded.get_uint(38).map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Should parse uint but failed: {e}"))
+        })?;
         assert_eq!(parsed_uint, Some(1_000_000));
     }
 
@@ -81,9 +81,9 @@ fn test_streaming_decoder() -> Result<(), Box<dyn std::error::Error>> {
             handle.add_string(112, "TEST123"); // TestReqID
         }
 
-        let encoded = handle
-            .encode()
-            .map_err(|e| format!("Encoding should succeed but failed: {e}"))?;
+        let encoded = handle.encode().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Encoding should succeed but failed: {e}"))
+        })?;
         messages.push(encoded);
     }
 
@@ -94,9 +94,9 @@ fn test_streaming_decoder() -> Result<(), Box<dyn std::error::Error>> {
         decoder.feed(&msg_data[..mid]);
 
         // Should not have a complete message yet
-        let first_decode = decoder
-            .decode_next()
-            .map_err(|e| format!("First decode_next() failed: {e}"))?;
+        let first_decode = decoder.decode_next().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("First decode_next() failed: {e}"))
+        })?;
         assert!(first_decode.is_none());
 
         // Feed rest of data
@@ -105,8 +105,12 @@ fn test_streaming_decoder() -> Result<(), Box<dyn std::error::Error>> {
         // Now should have a complete message
         let decoded = decoder
             .decode_next()
-            .map_err(|e| format!("Second decode_next() failed: {e}"))?
-            .ok_or("Should have a message but got None")?;
+            .map_err(|e| {
+                Box::<dyn std::error::Error>::from(format!("Second decode_next() failed: {e}"))
+            })?
+            .ok_or_else(|| {
+                Box::<dyn std::error::Error>::from("Should have a message but got None")
+            })?;
 
         assert_eq!(decoded.msg_type(), "0");
         assert_eq!(decoded.msg_seq_num(), (i + 1) as u64);
@@ -117,9 +121,9 @@ fn test_streaming_decoder() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // No more messages
-    let final_decode = decoder
-        .decode_next()
-        .map_err(|e| format!("Final decode_next() failed: {e}"))?;
+    let final_decode = decoder.decode_next().map_err(|e| {
+        Box::<dyn std::error::Error>::from(format!("Final decode_next() failed: {e}"))
+    })?;
     assert!(final_decode.is_none());
 
     Ok(())
@@ -179,14 +183,14 @@ fn test_field_types() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(decoded.get_bool(114), Some(true));
     assert_eq!(decoded.get_string(95), Some("test_data".to_string()));
 
-    let parsed_int = decoded
-        .get_int(31)
-        .map_err(|e| format!("Should parse int but failed: {e}"))?;
+    let parsed_int = decoded.get_int(31).map_err(|e| {
+        Box::<dyn std::error::Error>::from(format!("Should parse int but failed: {e}"))
+    })?;
     assert_eq!(parsed_int, Some(-100));
 
-    let parsed_uint = decoded
-        .get_uint(14)
-        .map_err(|e| format!("Should parse uint but failed: {e}"))?;
+    let parsed_uint = decoded.get_uint(14).map_err(|e| {
+        Box::<dyn std::error::Error>::from(format!("Should parse uint but failed: {e}"))
+    })?;
     assert_eq!(parsed_uint, Some(500_000));
 
     Ok(())

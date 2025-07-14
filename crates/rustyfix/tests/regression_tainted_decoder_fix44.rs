@@ -22,9 +22,9 @@ fn test_tainted_decoder_fix44_regression() -> Result<(), Box<dyn std::error::Err
     decoder.config_mut().verify_checksum = false;
 
     for sample in SAMPLES {
-        let message = decoder
-            .decode(sample)
-            .map_err(|e| format!("Couldn't decode sample FIX message: {e}"))?;
+        let message = decoder.decode(sample).map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Couldn't decode sample FIX message: {e}"))
+        })?;
         let msg_type = message.get::<fix44::MsgType>(fix44::MSG_TYPE.tag().get());
         assert!(msg_type.is_ok(), "fv() returns {msg_type:?}");
     }
