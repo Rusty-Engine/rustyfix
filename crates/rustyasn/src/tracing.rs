@@ -4,18 +4,117 @@ use fastrace::{Span, prelude::LocalSpan};
 use std::time::Instant;
 
 /// Creates a new span for encoding operations.
+///
+/// This function creates a distributed tracing span to track ASN.1 encoding operations.
+/// The span helps monitor encoding performance and debug issues in high-throughput
+/// financial messaging systems.
+///
+/// # Arguments
+///
+/// * `encoding_rule` - The ASN.1 encoding rule being used (e.g., "BER", "DER", "OER")
+/// * `_message_type` - The FIX message type being encoded (currently unused but reserved for future metrics)
+///
+/// # Returns
+///
+/// A [`Span`] that tracks the encoding operation. The span is automatically entered
+/// and will be exited when dropped.
+///
+/// # Examples
+///
+/// ```rust
+/// use rustyasn::tracing::encoding_span;
+///
+/// let _span = encoding_span("DER", "NewOrderSingle");
+/// // Encoding work happens within this span
+/// // Span is automatically closed when _span is dropped
+/// ```
+///
+/// # Performance
+///
+/// This function is marked `#[inline]` for minimal overhead in performance-critical
+/// encoding paths. The span creation is optimized for low-latency trading systems.
 #[inline]
 pub fn encoding_span(encoding_rule: &str, _message_type: &str) -> Span {
     Span::enter_with_local_parent(format!("asn1.encode.{encoding_rule}"))
 }
 
 /// Creates a new span for decoding operations.
+///
+/// This function creates a distributed tracing span to track ASN.1 decoding operations.
+/// The span helps monitor decoding performance, detect bottlenecks, and debug parsing
+/// issues in high-frequency trading systems.
+///
+/// # Arguments
+///
+/// * `encoding_rule` - The ASN.1 encoding rule being used (e.g., "BER", "DER", "OER")
+/// * `_data_size` - The size of the data being decoded (currently unused but reserved for future metrics)
+///
+/// # Returns
+///
+/// A [`Span`] that tracks the decoding operation. The span is automatically entered
+/// and will be exited when dropped.
+///
+/// # Examples
+///
+/// ```rust
+/// use rustyasn::tracing::decoding_span;
+///
+/// let data = &[0x30, 0x0A, 0x02, 0x01, 0x05]; // Sample ASN.1 data
+/// let _span = decoding_span("DER", data.len());
+/// // Decoding work happens within this span
+/// // Span is automatically closed when _span is dropped
+/// ```
+///
+/// # Performance
+///
+/// This function is marked `#[inline]` for minimal overhead in performance-critical
+/// decoding paths. The span creation is optimized for low-latency message processing.
 #[inline]
 pub fn decoding_span(encoding_rule: &str, _data_size: usize) -> Span {
     Span::enter_with_local_parent(format!("asn1.decode.{encoding_rule}"))
 }
 
 /// Creates a new span for schema operations.
+///
+/// This function creates a distributed tracing span to track ASN.1 schema-related operations
+/// such as validation, lookup, compilation, and transformation. Schema operations are critical
+/// for ensuring message integrity and type safety in FIX protocol implementations.
+///
+/// # Arguments
+///
+/// * `operation` - The schema operation being performed (e.g., "validate", "lookup", "compile", "transform")
+///
+/// # Returns
+///
+/// A [`Span`] that tracks the schema operation. The span is automatically entered
+/// and will be exited when dropped.
+///
+/// # Examples
+///
+/// ```rust
+/// use rustyasn::tracing::schema_span;
+///
+/// // Track schema validation
+/// let _span = schema_span("validate");
+/// // Schema validation work happens within this span
+///
+/// // Track schema lookup
+/// let _span = schema_span("lookup");
+/// // Schema lookup work happens within this span
+/// ```
+///
+/// # Common Operations
+///
+/// - `"validate"` - Schema validation against ASN.1 definitions
+/// - `"lookup"` - Field or message type lookups in schema
+/// - `"compile"` - Schema compilation from definitions
+/// - `"transform"` - Schema transformations and optimizations
+///
+/// # Performance
+///
+/// This function is marked `#[inline]` for minimal overhead. Schema operations
+/// can be performance-critical in message processing pipelines, especially when
+/// validating incoming messages in real-time trading systems.
 #[inline]
 pub fn schema_span(operation: &str) -> Span {
     Span::enter_with_local_parent(format!("asn1.schema.{operation}"))

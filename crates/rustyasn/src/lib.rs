@@ -17,21 +17,38 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use rustyasn::{Config, Encoder, Decoder, EncodingRule};
 //! use rustyfix::Dictionary;
+//! use std::sync::Arc;
 //!
-//! // Configure encoding
-//! let config = Config::new(EncodingRule::OER);
-//! let dictionary = Dictionary::fix44();
+//! fn example() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Configure encoding
+//!     let config = Config::new(EncodingRule::OER);
+//!     let dictionary = Arc::new(Dictionary::fix44()?);
 //!
-//! // Encode a message
-//! let mut encoder = Encoder::new(config, dictionary);
-//! let encoded = encoder.encode_message(msg)?;
+//!     // Create encoder and decoder
+//!     let encoder = Encoder::new(config.clone(), dictionary.clone());
+//!     let decoder = Decoder::new(config, dictionary);
 //!
-//! // Decode a message
-//! let decoder = Decoder::new(config, dictionary);
-//! let message = decoder.decode(&encoded)?;
+//!     // Start encoding a message
+//!     let mut handle = encoder.start_message(
+//!         "D",         // MsgType: NewOrderSingle
+//!         "SENDER",    // SenderCompID
+//!         "TARGET",    // TargetCompID
+//!         1,           // MsgSeqNum
+//!     );
+//!
+//!     // Add fields and encode
+//!     handle.add_string(11, "ORDER001");  // ClOrdID
+//!     let encoded = handle.encode()?;
+//!
+//!     // Decode the message
+//!     let message = decoder.decode(&encoded)?;
+//!     println!("Decoded message type: {}", message.msg_type());
+//!     
+//!     Ok(())
+//! }
 //! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -57,7 +74,7 @@ pub mod schema;
 pub mod types;
 
 #[cfg(feature = "tracing")]
-mod tracing;
+pub mod tracing;
 
 pub use config::{Config, EncodingRule};
 pub use decoder::{Decoder, DecoderStreaming};
