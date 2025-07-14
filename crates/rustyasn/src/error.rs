@@ -164,6 +164,15 @@ pub enum DecodeError {
         encoding_rule: &'static str,
     },
 
+    /// Message exceeds maximum allowed size
+    #[error("Message size {size} exceeds maximum {max_size}")]
+    MessageTooLarge {
+        /// Actual message size
+        size: usize,
+        /// Maximum allowed size
+        max_size: usize,
+    },
+
     /// Internal decoding error from rasn
     #[error("Internal ASN.1 decoding error: {0}")]
     Internal(String),

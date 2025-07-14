@@ -276,6 +276,14 @@ impl DecoderStreaming {
                 DecoderState::ReadingLength { offset } => {
                     // Try to decode length
                     if let Some((length, consumed)) = self.decode_length(offset)? {
+                        // Validate length against maximum message size to prevent DoS
+                        if length > self.decoder.config.max_message_size {
+                            return Err(Error::Decode(DecodeError::MessageTooLarge {
+                                size: length,
+                                max_size: self.decoder.config.max_message_size,
+                            }));
+                        }
+                        
                         self.state = DecoderState::ReadingMessage {
                             length,
                             offset: offset + consumed,
@@ -306,7 +314,9 @@ impl DecoderStreaming {
     /// Checks if a byte is a valid ASN.1 tag.
     fn is_valid_asn1_tag(&self, tag: u8) -> bool {
         // Check for valid ASN.1 tag format
-        tag == ASN1_SEQUENCE_TAG || (tag & ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK) == ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG // SEQUENCE or context-specific constructed
+        tag == ASN1_SEQUENCE_TAG
+            || (tag & ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK)
+                == ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG // SEQUENCE or context-specific constructed
     }
 
     /// Decodes ASN.1 length at the given offset.
@@ -428,5 +438,54 @@ mod tests {
 
         decoder.feed(&[ASN1_SEQUENCE_TAG, ASN1_LONG_FORM_LENGTH_2_BYTES]); // SEQUENCE tag with long form length
         assert_eq!(decoder.buffered_bytes(), 2);
+    }
+
+    #[test]
+    fn test_length_validation_against_max_size() {
+        // Create a config with a small max message size for testing
+        let mut config = Config::default();
+        config.max_message_size = 100; // Set a small limit for testing
+        
+        let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
+        let mut decoder = DecoderStreaming::new(config, dict);
+
+        // Feed a SEQUENCE tag
+        decoder.feed(&[ASN1_SEQUENCE_TAG]);
+        
+        // Feed a long form length that exceeds max_message_size
+        // Using 2-byte length encoding: first byte 0x82 means 2 length bytes follow
+        // Next two bytes encode length 0x1000 (4096 bytes) which exceeds our limit of 100
+        decoder.feed(&[0x82, 0x10, 0x00]); 
+        
+        // Try to decode - should fail with MessageTooLarge error
+        let result = decoder.decode_next();
+        match result {
+            Err(Error::Decode(DecodeError::MessageTooLarge { size, max_size })) => {
+                assert_eq!(size, 4096);
+                assert_eq!(max_size, 100);
+            }
+            _ => panic!("Expected MessageTooLarge error, got: {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_length_validation_passes_within_limit() {
+        let mut config = Config::default();
+        config.max_message_size = 1000; // Set reasonable limit
+        
+        let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
+        let mut decoder = DecoderStreaming::new(config, dict);
+
+        // Feed a SEQUENCE tag
+        decoder.feed(&[ASN1_SEQUENCE_TAG]);
+        
+        // Feed a short form length that's within limit (50 bytes)
+        decoder.feed(&[50]); 
+        
+        // Decoder should transition to ReadingMessage state without error
+        let result = decoder.decode_next();
+        // It will return Ok(None) because we don't have enough data yet
+        assert!(result.is_ok());
+        assert!(matches!(decoder.state, DecoderState::ReadingMessage { length: 50, .. }));
     }
 }
