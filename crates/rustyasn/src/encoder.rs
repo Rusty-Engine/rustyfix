@@ -160,8 +160,16 @@ impl Encoder {
             }
 
             EncodingRule::PER | EncodingRule::APER | EncodingRule::UPER => {
-                // PER not available in this version, use DER as fallback
-                der_encode(message).map_err(|e| Error::Encode(EncodeError::Internal(e.to_string())))
+                // PER encoding is not supported in this version of rasn
+                Err(Error::Encode(EncodeError::UnsupportedEncodingRule {
+                    rule: match rule {
+                        EncodingRule::PER => "PER",
+                        EncodingRule::APER => "APER",
+                        EncodingRule::UPER => "UPER",
+                        _ => "Unknown PER variant",
+                    },
+                    msg_type: message.msg_type.clone().into(),
+                }))
             }
 
             EncodingRule::OER => {
