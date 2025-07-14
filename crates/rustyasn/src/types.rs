@@ -139,11 +139,8 @@ impl FixFieldValue {
         } else {
             // For non-negative numbers, try unsigned first to prefer the more specific type
             if let Ok(u) = s.parse::<u64>() {
-                // If it fits in i64 range, use signed for consistency with FIX standard
-                if i64::try_from(u).is_ok() {
-                    return FixFieldValue::Integer(u as i64);
-                }
-                // Only use unsigned for values that don't fit in i64
+                // Use unsigned type for values parsed as u64 to maintain semantic meaning
+                // Always use unsigned type to preserve semantic meaning
                 return FixFieldValue::UnsignedInteger(u);
             }
         }
