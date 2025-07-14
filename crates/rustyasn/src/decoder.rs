@@ -336,7 +336,7 @@ impl DecoderStreaming {
 
                     // Check for ASN.1 tag
                     let tag = self.buffer[0];
-                    if !Self::is_valid_asn1_tag(tag) {
+                    if !Self::is_plausible_start_tag(tag) {
                         return Err(Error::Decode(DecodeError::InvalidTag { tag, offset: 0 }));
                     }
 
@@ -382,8 +382,9 @@ impl DecoderStreaming {
         }
     }
 
-    /// Checks if a byte is a valid ASN.1 tag.
-    fn is_valid_asn1_tag(_tag: u8) -> bool {
+    /// Checks if a byte is a plausible start tag for ASN.1 data.
+    /// This is a permissive check that accepts all potentially valid ASN.1 tags.
+    fn is_plausible_start_tag(_tag: u8) -> bool {
         // Accept a broader range of ASN.1 tags
         // Universal class tags (0x00-0x1F) are all valid
         // Application class (0x40-0x7F) are valid

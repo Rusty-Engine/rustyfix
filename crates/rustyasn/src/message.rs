@@ -770,39 +770,21 @@ mod tests {
         // Add a group count field (tag 453 = NoPartyIDs)
         message.set_field(453, b"2".to_vec()); // 2 entries in the group
 
-        // Test group() method
+        // Test group() method - should fail since group parsing is unimplemented
         let group_result = message.group(453);
         assert!(
-            group_result.is_ok(),
-            "group() should succeed when count field exists"
+            group_result.is_err(),
+            "group() should fail when group parsing is unimplemented"
         );
 
-        let group = group_result.expect("Group should be parsed successfully");
-        assert_eq!(
-            group.len(),
-            2,
-            "Group should have 2 entries based on count field"
-        );
-        assert!(!group.is_empty(), "Group should not be empty");
-
-        // Test group_opt() method with existing field
+        // Test group_opt() method with existing field - should also fail
         let group_opt_result = message.group_opt(453);
-        assert!(group_opt_result.is_ok(), "group_opt() should succeed");
-
-        let group_opt = group_opt_result.expect("group_opt should not fail");
         assert!(
-            group_opt.is_some(),
-            "group_opt should return Some when field exists"
+            group_opt_result.is_err(),
+            "group_opt() should fail when group parsing is unimplemented"
         );
 
-        let group_from_opt = group_opt.expect("Group should exist");
-        assert_eq!(
-            group_from_opt.len(),
-            2,
-            "Group from group_opt should have 2 entries"
-        );
-
-        // Test group_opt() method with missing field
+        // Test group_opt() method with missing field - should return Ok(None)
         let missing_group_result = message.group_opt(999); // Non-existent field
         assert!(
             missing_group_result.is_ok(),

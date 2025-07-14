@@ -70,3 +70,4 @@ chrono = { workspace = true }
 [[bench]]
 name = "asn1_encodings"
 harness = false
+

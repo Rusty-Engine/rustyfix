@@ -58,20 +58,19 @@ const SCHEMA_SERIALIZE_SPAN: &str = "asn1.schema.serialize";
 /// This function is marked `#[inline]` for minimal overhead in performance-critical
 /// encoding paths. The span creation is optimized for low-latency trading systems.
 /// Common encoding rules (BER, DER, OER, PER, XER, JER) use static strings to avoid
-/// heap allocation, with format!() fallback only for rare unknown rules.
+/// heap allocation, with fallback to generic span name for rare unknown rules.
 #[inline]
 pub fn encoding_span(encoding_rule: &str, _message_type: &str) -> Span {
-    let span_name = match encoding_rule {
-        "BER" => ENCODE_BER_SPAN,
-        "DER" => ENCODE_DER_SPAN,
-        "OER" => ENCODE_OER_SPAN,
-        "PER" => ENCODE_PER_SPAN,
-        "XER" => ENCODE_XER_SPAN,
-        "JER" => ENCODE_JER_SPAN,
-        // Fall back to format!() for unknown encoding rules (rare case)
-        _ => return Span::enter_with_local_parent(format!("asn1.encode.{encoding_rule}")),
-    };
-    Span::enter_with_local_parent(span_name)
+    match encoding_rule {
+        "BER" => Span::enter_with_local_parent(ENCODE_BER_SPAN),
+        "DER" => Span::enter_with_local_parent(ENCODE_DER_SPAN),
+        "OER" => Span::enter_with_local_parent(ENCODE_OER_SPAN),
+        "PER" => Span::enter_with_local_parent(ENCODE_PER_SPAN),
+        "XER" => Span::enter_with_local_parent(ENCODE_XER_SPAN),
+        "JER" => Span::enter_with_local_parent(ENCODE_JER_SPAN),
+        // Use generic span name for unknown encoding rules (rare case) to avoid heap allocation
+        _ => Span::enter_with_local_parent("asn1.encode.unknown"),
+    }
 }
 
 /// Creates a new span for decoding operations.
@@ -106,20 +105,19 @@ pub fn encoding_span(encoding_rule: &str, _message_type: &str) -> Span {
 /// This function is marked `#[inline]` for minimal overhead in performance-critical
 /// decoding paths. The span creation is optimized for low-latency message processing.
 /// Common encoding rules (BER, DER, OER, PER, XER, JER) use static strings to avoid
-/// heap allocation, with format!() fallback only for rare unknown rules.
+/// heap allocation, with fallback to generic span name for rare unknown rules.
 #[inline]
 pub fn decoding_span(encoding_rule: &str, _data_size: usize) -> Span {
-    let span_name = match encoding_rule {
-        "BER" => DECODE_BER_SPAN,
-        "DER" => DECODE_DER_SPAN,
-        "OER" => DECODE_OER_SPAN,
-        "PER" => DECODE_PER_SPAN,
-        "XER" => DECODE_XER_SPAN,
-        "JER" => DECODE_JER_SPAN,
-        // Fall back to format!() for unknown encoding rules (rare case)
-        _ => return Span::enter_with_local_parent(format!("asn1.decode.{encoding_rule}")),
-    };
-    Span::enter_with_local_parent(span_name)
+    match encoding_rule {
+        "BER" => Span::enter_with_local_parent(DECODE_BER_SPAN),
+        "DER" => Span::enter_with_local_parent(DECODE_DER_SPAN),
+        "OER" => Span::enter_with_local_parent(DECODE_OER_SPAN),
+        "PER" => Span::enter_with_local_parent(DECODE_PER_SPAN),
+        "XER" => Span::enter_with_local_parent(DECODE_XER_SPAN),
+        "JER" => Span::enter_with_local_parent(DECODE_JER_SPAN),
+        // Use generic span name for unknown encoding rules (rare case) to avoid heap allocation
+        _ => Span::enter_with_local_parent("asn1.decode.unknown"),
+    }
 }
 
 /// Creates a new span for schema operations.
@@ -164,20 +162,19 @@ pub fn decoding_span(encoding_rule: &str, _data_size: usize) -> Span {
 /// can be performance-critical in message processing pipelines, especially when
 /// validating incoming messages in real-time trading systems.
 /// Common operations (validate, lookup, compile, transform, parse, serialize) use
-/// static strings to avoid heap allocation, with format!() fallback only for rare unknown operations.
+/// static strings to avoid heap allocation, with fallback to generic span name for rare unknown operations.
 #[inline]
 pub fn schema_span(operation: &str) -> Span {
-    let span_name = match operation {
-        "validate" => SCHEMA_VALIDATE_SPAN,
-        "lookup" => SCHEMA_LOOKUP_SPAN,
-        "compile" => SCHEMA_COMPILE_SPAN,
-        "transform" => SCHEMA_TRANSFORM_SPAN,
-        "parse" => SCHEMA_PARSE_SPAN,
-        "serialize" => SCHEMA_SERIALIZE_SPAN,
-        // Fall back to format!() for unknown operations (rare case)
-        _ => return Span::enter_with_local_parent(format!("asn1.schema.{operation}")),
-    };
-    Span::enter_with_local_parent(span_name)
+    match operation {
+        "validate" => Span::enter_with_local_parent(SCHEMA_VALIDATE_SPAN),
+        "lookup" => Span::enter_with_local_parent(SCHEMA_LOOKUP_SPAN),
+        "compile" => Span::enter_with_local_parent(SCHEMA_COMPILE_SPAN),
+        "transform" => Span::enter_with_local_parent(SCHEMA_TRANSFORM_SPAN),
+        "parse" => Span::enter_with_local_parent(SCHEMA_PARSE_SPAN),
+        "serialize" => Span::enter_with_local_parent(SCHEMA_SERIALIZE_SPAN),
+        // Use generic span name for unknown operations (rare case) to avoid heap allocation
+        _ => Span::enter_with_local_parent("asn1.schema.unknown"),
+    }
 }
 
 /// Measures encoding performance metrics.
