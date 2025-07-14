@@ -35,7 +35,7 @@
 //! let message = decoder.decode(&encoded)?;
 //! ```
 
-#![cfg_attr(doc_cfg, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(
     missing_docs,
     rust_2024_incompatible_pat,

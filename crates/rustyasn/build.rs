@@ -32,15 +32,16 @@ fn generate_fix_asn1_definitions() -> Result<()> {
     generate_fix_dictionary_asn1(&fix44_dict, "fix44_asn1.rs", out_path)?;
 
     // Generate for other FIX versions if features are enabled
-    #[cfg(feature = "fix40")]
-    {
-        let fix40_dict = Dictionary::fix40()?;
+    // Build scripts don't inherit features, so we check environment variables instead
+    if env::var("CARGO_FEATURE_FIX40").is_ok() {
+        println!("cargo:warning=Generating ASN.1 definitions for FIX 4.0");
+        let fix40_dict = Dictionary::fix40().expect("Failed to parse FIX 4.0 dictionary");
         generate_fix_dictionary_asn1(&fix40_dict, "fix40_asn1.rs", out_path)?;
     }
 
-    #[cfg(feature = "fix50")]
-    {
-        let fix50_dict = Dictionary::fix50sp2()?;
+    if env::var("CARGO_FEATURE_FIX50").is_ok() {
+        println!("cargo:warning=Generating ASN.1 definitions for FIX 5.0");
+        let fix50_dict = Dictionary::fix50().expect("Failed to parse FIX 5.0 dictionary");
         generate_fix_dictionary_asn1(&fix50_dict, "fix50_asn1.rs", out_path)?;
     }
 
@@ -126,12 +127,10 @@ pub enum FixMessageType {
     }
 
     // Generate enum variants
-    let mut discriminant = 0u32;
-    for (msg_type, enum_name) in &message_types {
+    for (discriminant, (msg_type, enum_name)) in message_types.iter().enumerate() {
         output.push_str(&format!(
             "    /// Message type '{msg_type}'\n    {enum_name} = {discriminant},\n"
         ));
-        discriminant += 1;
     }
 
     output.push_str("}\n\n");
@@ -374,8 +373,7 @@ pub enum {} {{
             ));
 
             // Generate enum variants
-            let mut discriminant = 0u32;
-            for enum_value in &enums_vec {
+            for (discriminant, enum_value) in enums_vec.iter().enumerate() {
                 let mut variant_name = if enum_value.description().is_empty() {
                     enum_value.value()
                 } else {
@@ -405,7 +403,6 @@ pub enum {} {{
                     variant_name,
                     discriminant
                 ));
-                discriminant += 1;
             }
 
             output.push_str("}\n\n");
@@ -524,7 +521,9 @@ END
             // For now, just copy the schema files to OUT_DIR
             // In a full implementation, you would parse and compile them
             let out_dir = env::var("OUT_DIR")?;
-            let filename = schema_file.file_name().unwrap();
+            let filename = schema_file
+                .file_name()
+                .expect("Schema file should have a valid filename");
             let output_path = Path::new(&out_dir).join(filename);
             fs::copy(&schema_file, output_path)?;
         }
