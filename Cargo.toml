@@ -20,19 +20,7 @@ repository = "https://github.com/rusty-trading/rusty-fix-engine"
 description = "FIX & FAST (FIX Adapted for STreaming) in pure Rust"
 publish = true
 readme = "README.md"
-keywords = [
-    "fix",
-    "fix-protocol",
-    "quickfix",
-    "fix-engine",
-    "fix-parser",
-    "fast",
-    "protocol",
-    "trading",
-    "finance",
-    "fintech",
-    "hft",
-]
+keywords = ["fix", "fix-protocol", "fast", "trading", "hft"]
 categories = [
     "network-programming",
     "parser-implementations",
