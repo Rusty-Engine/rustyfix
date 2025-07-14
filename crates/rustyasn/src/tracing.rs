@@ -3,6 +3,30 @@
 use fastrace::{Span, prelude::LocalSpan};
 use std::time::Instant;
 
+// Static span names for common encoding operations (zero-allocation)
+const ENCODE_BER_SPAN: &str = "asn1.encode.BER";
+const ENCODE_DER_SPAN: &str = "asn1.encode.DER";
+const ENCODE_OER_SPAN: &str = "asn1.encode.OER";
+const ENCODE_PER_SPAN: &str = "asn1.encode.PER";
+const ENCODE_XER_SPAN: &str = "asn1.encode.XER";
+const ENCODE_JER_SPAN: &str = "asn1.encode.JER";
+
+// Static span names for common decoding operations (zero-allocation)
+const DECODE_BER_SPAN: &str = "asn1.decode.BER";
+const DECODE_DER_SPAN: &str = "asn1.decode.DER";
+const DECODE_OER_SPAN: &str = "asn1.decode.OER";
+const DECODE_PER_SPAN: &str = "asn1.decode.PER";
+const DECODE_XER_SPAN: &str = "asn1.decode.XER";
+const DECODE_JER_SPAN: &str = "asn1.decode.JER";
+
+// Static span names for common schema operations (zero-allocation)
+const SCHEMA_VALIDATE_SPAN: &str = "asn1.schema.validate";
+const SCHEMA_LOOKUP_SPAN: &str = "asn1.schema.lookup";
+const SCHEMA_COMPILE_SPAN: &str = "asn1.schema.compile";
+const SCHEMA_TRANSFORM_SPAN: &str = "asn1.schema.transform";
+const SCHEMA_PARSE_SPAN: &str = "asn1.schema.parse";
+const SCHEMA_SERIALIZE_SPAN: &str = "asn1.schema.serialize";
+
 /// Creates a new span for encoding operations.
 ///
 /// This function creates a distributed tracing span to track ASN.1 encoding operations.
@@ -33,9 +57,21 @@ use std::time::Instant;
 ///
 /// This function is marked `#[inline]` for minimal overhead in performance-critical
 /// encoding paths. The span creation is optimized for low-latency trading systems.
+/// Common encoding rules (BER, DER, OER, PER, XER, JER) use static strings to avoid
+/// heap allocation, with format!() fallback only for rare unknown rules.
 #[inline]
 pub fn encoding_span(encoding_rule: &str, _message_type: &str) -> Span {
-    Span::enter_with_local_parent(format!("asn1.encode.{encoding_rule}"))
+    let span_name = match encoding_rule {
+        "BER" => ENCODE_BER_SPAN,
+        "DER" => ENCODE_DER_SPAN,
+        "OER" => ENCODE_OER_SPAN,
+        "PER" => ENCODE_PER_SPAN,
+        "XER" => ENCODE_XER_SPAN,
+        "JER" => ENCODE_JER_SPAN,
+        // Fall back to format!() for unknown encoding rules (rare case)
+        _ => return Span::enter_with_local_parent(format!("asn1.encode.{encoding_rule}")),
+    };
+    Span::enter_with_local_parent(span_name)
 }
 
 /// Creates a new span for decoding operations.
@@ -69,9 +105,21 @@ pub fn encoding_span(encoding_rule: &str, _message_type: &str) -> Span {
 ///
 /// This function is marked `#[inline]` for minimal overhead in performance-critical
 /// decoding paths. The span creation is optimized for low-latency message processing.
+/// Common encoding rules (BER, DER, OER, PER, XER, JER) use static strings to avoid
+/// heap allocation, with format!() fallback only for rare unknown rules.
 #[inline]
 pub fn decoding_span(encoding_rule: &str, _data_size: usize) -> Span {
-    Span::enter_with_local_parent(format!("asn1.decode.{encoding_rule}"))
+    let span_name = match encoding_rule {
+        "BER" => DECODE_BER_SPAN,
+        "DER" => DECODE_DER_SPAN,
+        "OER" => DECODE_OER_SPAN,
+        "PER" => DECODE_PER_SPAN,
+        "XER" => DECODE_XER_SPAN,
+        "JER" => DECODE_JER_SPAN,
+        // Fall back to format!() for unknown encoding rules (rare case)
+        _ => return Span::enter_with_local_parent(format!("asn1.decode.{encoding_rule}")),
+    };
+    Span::enter_with_local_parent(span_name)
 }
 
 /// Creates a new span for schema operations.
@@ -115,15 +163,29 @@ pub fn decoding_span(encoding_rule: &str, _data_size: usize) -> Span {
 /// This function is marked `#[inline]` for minimal overhead. Schema operations
 /// can be performance-critical in message processing pipelines, especially when
 /// validating incoming messages in real-time trading systems.
+/// Common operations (validate, lookup, compile, transform, parse, serialize) use
+/// static strings to avoid heap allocation, with format!() fallback only for rare unknown operations.
 #[inline]
 pub fn schema_span(operation: &str) -> Span {
-    Span::enter_with_local_parent(format!("asn1.schema.{operation}"))
+    let span_name = match operation {
+        "validate" => SCHEMA_VALIDATE_SPAN,
+        "lookup" => SCHEMA_LOOKUP_SPAN,
+        "compile" => SCHEMA_COMPILE_SPAN,
+        "transform" => SCHEMA_TRANSFORM_SPAN,
+        "parse" => SCHEMA_PARSE_SPAN,
+        "serialize" => SCHEMA_SERIALIZE_SPAN,
+        // Fall back to format!() for unknown operations (rare case)
+        _ => return Span::enter_with_local_parent(format!("asn1.schema.{operation}")),
+    };
+    Span::enter_with_local_parent(span_name)
 }
 
 /// Measures encoding performance metrics.
 pub struct EncodingMetrics {
     start: Instant,
+    #[allow(dead_code)]
     encoding_rule: &'static str,
+    #[allow(dead_code)]
     message_type: String,
     field_count: usize,
 }
@@ -156,7 +218,9 @@ impl EncodingMetrics {
 /// Measures decoding performance metrics.
 pub struct DecodingMetrics {
     start: Instant,
+    #[allow(dead_code)]
     encoding_rule: &'static str,
+    #[allow(dead_code)]
     input_size: usize,
 }
 

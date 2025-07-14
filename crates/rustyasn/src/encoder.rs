@@ -32,6 +32,37 @@ pub const BOOLEAN_SIZE: usize = 1;
 /// ASN.1 TLV (Tag-Length-Value) encoding overhead per field
 pub const FIELD_TLV_OVERHEAD: usize = 5;
 
+/// Common fields that appear in many message types (ordered by frequency)
+/// This significantly improves performance for typical messages
+const COMMON_FIELD_TAGS: &[u32] = &[
+    // Market data fields
+    55, // Symbol
+    54, // Side
+    38, // OrderQty
+    44, // Price
+    40, // OrdType
+    59, // TimeInForce
+    // Order/execution fields
+    11,  // ClOrdID
+    37,  // OrderID
+    17,  // ExecID
+    150, // ExecType
+    39,  // OrdStatus
+    // Additional common fields
+    1,   // Account
+    6,   // AvgPx
+    14,  // CumQty
+    32,  // LastQty
+    31,  // LastPx
+    151, // LeavesQty
+    60,  // TransactTime
+    109, // ClientID
+    // Reference fields
+    58,  // Text
+    354, // EncodedTextLen
+    355, // EncodedText
+];
+
 /// ASN.1 encoder for FIX messages.
 pub struct Encoder {
     config: Config,
@@ -87,23 +118,32 @@ impl Encoder {
     }
 
     /// Encodes a complete FIX message from a field map.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Required header fields (`MsgType`, `SenderCompID`, `TargetCompID`, `MsgSeqNum`) are missing
+    /// - Field values contain invalid UTF-8 sequences
+    /// - Field values cannot be parsed as expected types (e.g., `MsgSeqNum` as u64)
+    /// - The estimated message size exceeds configured limits
+    /// - ASN.1 encoding fails due to internal errors
     pub fn encode_message<F: FieldMap<u32>>(&self, msg: &F) -> Result<Vec<u8>> {
         // Extract standard header fields
-        let msg_type = self.get_required_string_field(msg, 35)?;
-        let sender = self.get_required_string_field(msg, 49)?;
-        let target = self.get_required_string_field(msg, 56)?;
-        let seq_num = self.get_required_u64_field(msg, 34)?;
+        let msg_type = Self::get_required_string_field(msg, 35)?;
+        let sender = Self::get_required_string_field(msg, 49)?;
+        let target = Self::get_required_string_field(msg, 56)?;
+        let seq_num = Self::get_required_u64_field(msg, 34)?;
 
         let mut handle = self.start_message(&msg_type, &sender, &target, seq_num);
 
         // Add all other fields
-        self.add_message_fields(&mut handle, msg)?;
+        self.add_message_fields(&mut handle, msg);
 
         handle.encode()
     }
 
     /// Extracts a required string field from a message.
-    fn get_required_string_field<F: FieldMap<u32>>(&self, msg: &F, tag: u32) -> Result<FixString> {
+    fn get_required_string_field<F: FieldMap<u32>>(msg: &F, tag: u32) -> Result<FixString> {
         msg.get_raw(tag)
             .ok_or_else(|| {
                 Error::Encode(EncodeError::RequiredFieldMissing {
@@ -124,7 +164,7 @@ impl Encoder {
     }
 
     /// Extracts a required u64 field from a message.
-    fn get_required_u64_field<F: FieldMap<u32>>(&self, msg: &F, tag: u32) -> Result<u64> {
+    fn get_required_u64_field<F: FieldMap<u32>>(msg: &F, tag: u32) -> Result<u64> {
         let bytes = msg.get_raw(tag).ok_or_else(|| {
             Error::Encode(EncodeError::RequiredFieldMissing {
                 tag,
@@ -152,51 +192,16 @@ impl Encoder {
     ///
     /// This method uses an optimized approach that prioritizes common fields
     /// and intelligently iterates through dictionary fields.
-    fn add_message_fields<F: FieldMap<u32>>(
-        &self,
-        handle: &mut EncoderHandle,
-        msg: &F,
-    ) -> Result<()> {
+    fn add_message_fields<F: FieldMap<u32>>(&self, handle: &mut EncoderHandle, msg: &F) {
         // Get the dictionary for field validation
         let dictionary = self.schema.dictionary();
-
-        // Common fields that appear in many message types (ordered by frequency)
-        // This significantly improves performance for typical messages
-        const COMMON_FIELD_TAGS: &[u32] = &[
-            // Market data fields
-            55, // Symbol
-            54, // Side
-            38, // OrderQty
-            44, // Price
-            40, // OrdType
-            59, // TimeInForce
-            // Order/execution fields
-            11,  // ClOrdID
-            37,  // OrderID
-            17,  // ExecID
-            150, // ExecType
-            39,  // OrdStatus
-            // Additional common fields
-            1,   // Account
-            6,   // AvgPx
-            14,  // CumQty
-            32,  // LastQty
-            31,  // LastPx
-            151, // LeavesQty
-            60,  // TransactTime
-            109, // ClientID
-            // Reference fields
-            58,  // Text
-            354, // EncodedTextLen
-            355, // EncodedText
-        ];
 
         // Track which tags we've already processed
         let mut processed_tags = FxHashSet::default();
 
         // First pass: Check common fields (O(1) for each)
         for &tag in COMMON_FIELD_TAGS {
-            if self.is_standard_header_field(tag) {
+            if Self::is_standard_header_field(tag) {
                 continue;
             }
 
@@ -215,23 +220,20 @@ impl Encoder {
         {
             // Get fields specific to this message type by iterating through its layout
             for layout_item in msg_type_def.layout() {
-                match layout_item.kind() {
-                    rustyfix_dictionary::LayoutItemKind::Field(field) => {
-                        let tag = field.tag().get();
+                if let rustyfix_dictionary::LayoutItemKind::Field(field) = layout_item.kind() {
+                    let tag = field.tag().get();
 
-                        if processed_tags.contains(&tag) || self.is_standard_header_field(tag) {
-                            continue;
-                        }
-
-                        if let Some(raw_data) = msg.get_raw(tag) {
-                            let value_str = String::from_utf8_lossy(raw_data);
-                            handle.add_field(tag, value_str.to_string());
-                            processed_tags.insert(tag);
-                        }
+                    if processed_tags.contains(&tag) || Self::is_standard_header_field(tag) {
+                        continue;
                     }
-                    // We could also handle groups and components here if needed
-                    _ => {}
+
+                    if let Some(raw_data) = msg.get_raw(tag) {
+                        let value_str = String::from_utf8_lossy(raw_data);
+                        handle.add_field(tag, value_str.to_string());
+                        processed_tags.insert(tag);
+                    }
                 }
+                // We could also handle groups and components here if needed
             }
         }
 
@@ -242,7 +244,7 @@ impl Encoder {
             let tag = field.tag().get();
 
             // Skip if already processed or is a header field
-            if processed_tags.contains(&tag) || self.is_standard_header_field(tag) {
+            if processed_tags.contains(&tag) || Self::is_standard_header_field(tag) {
                 continue;
             }
 
@@ -251,13 +253,11 @@ impl Encoder {
                 handle.add_field(tag, value_str.to_string());
             }
         }
-
-        Ok(())
     }
 
     /// Checks if a field tag is a standard FIX header field.
     /// These fields are handled separately by `start_message`.
-    fn is_standard_header_field(&self, tag: u32) -> bool {
+    const fn is_standard_header_field(tag: u32) -> bool {
         matches!(
             tag,
             8 |  // BeginString
@@ -272,7 +272,7 @@ impl Encoder {
     }
 
     /// Encodes using the specified encoding rule.
-    fn encode_with_rule(&self, message: &FixMessage, rule: EncodingRule) -> Result<Vec<u8>> {
+    fn encode_with_rule(message: &FixMessage, rule: EncodingRule) -> Result<Vec<u8>> {
         match rule {
             EncodingRule::BER => {
                 ber_encode(message).map_err(|e| Error::Encode(EncodeError::Internal(e.to_string())))
@@ -290,13 +290,13 @@ impl Encoder {
 }
 
 impl SetField<u32> for EncoderHandle<'_> {
-    fn set_with<'b, V>(&'b mut self, field: u32, value: V, _settings: V::SerializeSettings)
+    fn set_with<'b, V>(&'b mut self, field: u32, value: V, settings: V::SerializeSettings)
     where
         V: FieldType<'b>,
     {
         // Serialize the value to bytes using a temporary buffer that implements Buffer
         let mut temp_buffer: SmallVec<[u8; crate::FIELD_BUFFER_SIZE]> = SmallVec::new();
-        value.serialize_with(&mut temp_buffer, _settings);
+        value.serialize_with(&mut temp_buffer, settings);
 
         // Convert to string for FIX compatibility
         let value_str = String::from_utf8_lossy(&temp_buffer);
@@ -337,6 +337,12 @@ impl EncoderHandle<'_> {
     }
 
     /// Encodes the message and returns the encoded bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The estimated message size exceeds the configured maximum message size
+    /// - ASN.1 encoding fails due to internal encoding errors
     pub fn encode(self) -> Result<Vec<u8>> {
         // Check message size before encoding
         let estimated_size = self.estimate_size();
@@ -356,7 +362,7 @@ impl EncoderHandle<'_> {
             .unwrap_or(self.encoder.config.encoding_rule);
 
         // Encode the message
-        self.encoder.encode_with_rule(&self.message, encoding_rule)
+        Encoder::encode_with_rule(&self.message, encoding_rule)
     }
 
     /// Estimates the encoded size of the message.
@@ -375,15 +381,15 @@ impl EncoderHandle<'_> {
                 // Each field has tag number + value + ASN.1 encoding overhead
                 let tag_size = TAG_ENCODING_SIZE; // Conservative estimate for tag encoding
                 let value_size = match &field.value {
-                    crate::types::FixFieldValue::String(s) => s.len(),
-                    crate::types::FixFieldValue::Decimal(s) => s.len(),
-                    crate::types::FixFieldValue::Character(s) => s.len(),
-                    crate::types::FixFieldValue::UtcTimestamp(s) => s.len(),
-                    crate::types::FixFieldValue::UtcDate(s) => s.len(),
-                    crate::types::FixFieldValue::UtcTime(s) => s.len(),
-                    crate::types::FixFieldValue::Raw(s) => s.len(),
-                    crate::types::FixFieldValue::Integer(_) => INTEGER_ESTIMATE_SIZE, // i64 estimate
-                    crate::types::FixFieldValue::UnsignedInteger(_) => INTEGER_ESTIMATE_SIZE, // u64 estimate
+                    crate::types::FixFieldValue::String(s)
+                    | crate::types::FixFieldValue::Decimal(s)
+                    | crate::types::FixFieldValue::Character(s)
+                    | crate::types::FixFieldValue::UtcTimestamp(s)
+                    | crate::types::FixFieldValue::UtcDate(s)
+                    | crate::types::FixFieldValue::UtcTime(s)
+                    | crate::types::FixFieldValue::Raw(s) => s.len(),
+                    crate::types::FixFieldValue::Integer(_)
+                    | crate::types::FixFieldValue::UnsignedInteger(_) => INTEGER_ESTIMATE_SIZE, // i64/u64 estimate
                     crate::types::FixFieldValue::Boolean(_) => BOOLEAN_SIZE,
                     crate::types::FixFieldValue::Data(data) => data.len(),
                 };
@@ -412,6 +418,11 @@ impl EncoderStreaming {
     }
 
     /// Encodes a message and appends to the output buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying encoder fails to encode the message.
+    /// See [`Encoder::encode_message`] for detailed error conditions.
     pub fn encode_message<F: FieldMap<u32>>(&mut self, msg: &F) -> Result<()> {
         let encoded = self.encoder.encode_message(msg)?;
         self.output_buffer.extend_from_slice(&encoded);

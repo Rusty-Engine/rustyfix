@@ -71,8 +71,8 @@ impl<const N: usize> ConstBuffer<N> {
     /// Returns true if the buffer is currently using stack allocation.
     #[inline]
     pub fn is_inline(&self) -> bool {
-        // Check if we're using inline storage by comparing capacity
-        self.inner.len() <= N && self.inner.capacity() <= N
+        // Check if we're using inline storage using SmallVec's spilled() method
+        !self.inner.spilled()
     }
 }
 

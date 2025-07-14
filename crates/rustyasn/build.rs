@@ -1,4 +1,67 @@
 //! Build script for ASN.1 schema compilation and code generation.
+//!
+//! # Why Custom ASN.1 Parser Instead of rasn-compiler?
+//!
+//! This build script implements a custom ASN.1 parser and code generator rather than using
+//! the official `rasn-compiler` crate. This architectural decision was made due to several
+//! compatibility and maintenance considerations:
+//!
+//! ## Version Compatibility Issues
+//!
+//! The primary reason for the custom implementation is version incompatibility between
+//! `rasn-compiler` and `rasn` 0.18.x:
+//!
+//! - **rasn-compiler dependency conflicts**: The rasn-compiler crate may depend on different
+//!   versions of rasn than the 0.18.x version used in this project, causing dependency
+//!   resolution conflicts during build.
+//!
+//! - **API surface changes**: Between rasn versions, there have been breaking changes in
+//!   the generated code APIs, attribute syntax, and trait implementations that make
+//!   rasn-compiler-generated code incompatible with rasn 0.18.x.
+//!
+//! - **Build-time constraints**: Using rasn-compiler would require careful version pinning
+//!   and potentially upgrading rasn itself, which could introduce breaking changes throughout
+//!   the RustyFix codebase.
+//!
+//! ## Benefits of Custom Implementation
+//!
+//! The custom ASN.1 parser implementation provides several advantages:
+//!
+//! - **Precise control**: Generate code that exactly matches the needs of the FIX protocol
+//!   encoding requirements and integrates seamlessly with RustyFix's type system.
+//!
+//! - **Stability**: Immune to breaking changes in rasn-compiler updates, ensuring consistent
+//!   builds across different environments and over time.
+//!
+//! - **FIX-specific optimizations**: Tailored for FIX protocol message structures, field
+//!   types, and encoding patterns rather than generic ASN.1 use cases.
+//!
+//! - **Reduced dependencies**: Eliminates the need for rasn-compiler and its transitive
+//!   dependencies, reducing build complexity and potential security surface.
+//!
+//! - **Incremental implementation**: Can be extended progressively to support additional
+//!   ASN.1 features as needed by the FIX protocol without waiting for upstream changes.
+//!
+//! ## Migration Path
+//!
+//! Future migration to rasn-compiler should be considered when:
+//!
+//! - rasn-compiler achieves stable compatibility with rasn 0.18.x or later
+//! - The RustyFix project upgrades to a newer rasn version that's compatible with
+//!   the latest rasn-compiler
+//! - The maintenance burden of the custom parser becomes significant
+//!
+//! ## Implementation Details
+//!
+//! The custom parser handles:
+//! - Basic ASN.1 constructs (SEQUENCE, CHOICE, ENUMERATED, INTEGER, STRING types)
+//! - FIX-specific message type generation from dictionary metadata
+//! - Field tag enumerations and value type mappings
+//! - Integration with rasn's derive macros for encoding/decoding
+//!
+//! For complex ASN.1 schemas that require advanced features not implemented in the
+//! custom parser, the build script falls back to copying the schema files directly
+//! and emitting warnings about unsupported constructs.
 
 use anyhow::{Context, Result};
 use heck::ToPascalCase;
@@ -41,6 +104,8 @@ fn main() -> Result<()> {
     println!("cargo:warning=Detected FIX features: {enabled_features:?}");
 
     // Generate ASN.1 definitions from FIX dictionaries
+    // This creates type-safe ASN.1 representations of FIX message structures
+    // without requiring rasn-compiler, ensuring compatibility with rasn 0.18.x
     generate_fix_asn1_definitions(&enabled_features)
         .context("Failed to generate FIX ASN.1 definitions")?;
 
@@ -98,7 +163,11 @@ fn probe_available_dictionaries() -> Vec<String> {
     let env_vars: Vec<_> = env::vars()
         .filter_map(|(key, _)| {
             if key.starts_with("CARGO_FEATURE_FIX") {
-                let feature_name = key.strip_prefix("CARGO_FEATURE_").unwrap().to_lowercase();
+                #[allow(clippy::expect_used)]
+                let feature_name = key
+                    .strip_prefix("CARGO_FEATURE_")
+                    .expect("Environment variable must start with CARGO_FEATURE_ prefix")
+                    .to_lowercase();
                 Some(feature_name)
             } else {
                 None
@@ -673,13 +742,21 @@ END
         );
     }
 
-    // Process any .asn1 files in the schemas directory using proper ASN.1 compilation
+    // Process any .asn1 files in the schemas directory using our custom ASN.1 parser
+    // Note: This uses a custom parser instead of rasn-compiler due to version compatibility issues
     compile_asn1_schemas(&schemas_dir).context("Failed to compile ASN.1 schemas")?;
 
     Ok(())
 }
 
-/// Compiles ASN.1 schema files using rasn-compiler for proper code generation.
+/// Compiles ASN.1 schema files using a custom ASN.1 parser implementation.
+///
+/// **Note**: This function uses a custom ASN.1 parser instead of rasn-compiler due to
+/// version incompatibility issues between rasn-compiler and rasn 0.18.x. The custom
+/// implementation provides better control over the generated code and avoids dependency
+/// conflicts while maintaining compatibility with the rasn framework.
+///
+/// See the module-level documentation for detailed reasoning behind this architectural choice.
 fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
     let schema_pattern = schemas_dir.join("*.asn1");
 
@@ -707,7 +784,9 @@ fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
                 let output_file = format!("{file_stem}_asn1.rs");
                 let output_path = out_path.join(&output_file);
 
-                // Attempt to compile the ASN.1 schema
+                // Attempt to compile the ASN.1 schema using our custom parser
+                // This avoids rasn-compiler version compatibility issues while providing
+                // targeted support for FIX protocol ASN.1 extensions
                 match compile_asn1_file(&schema_file, &output_path) {
                     Ok(_) => {
                         println!(
@@ -717,11 +796,15 @@ fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
                         );
                     }
                     Err(e) => {
-                        // If compilation fails, fall back to copying the file and warn
+                        // If our custom parser fails, fall back to copying the file and warn
+                        // This provides a graceful degradation path for complex schemas
                         println!(
-                            "cargo:warning=ASN.1 compilation failed for {}: {}. Copying file instead.",
+                            "cargo:warning=Custom ASN.1 parser failed for {}: {}. Copying file instead.",
                             schema_file.display(),
                             e
+                        );
+                        println!(
+                            "cargo:warning=Consider simplifying the schema or extending the custom parser to support this construct."
                         );
                         let filename = schema_file.file_name().with_context(|| {
                             format!(
@@ -745,8 +828,27 @@ fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Compiles a single ASN.1 schema file to Rust code.
-/// Implements a basic ASN.1 parser that can handle common structures.
+/// Compiles a single ASN.1 schema file to Rust code using a custom ASN.1 parser.
+///
+/// This function implements a custom ASN.1 parser that handles the subset of ASN.1
+/// constructs commonly used in FIX protocol extensions. The parser is designed to
+/// generate code compatible with rasn 0.18.x while avoiding the version compatibility
+/// issues that would arise from using rasn-compiler.
+///
+/// **Supported ASN.1 Constructs:**
+/// - SEQUENCE types with optional fields and explicit tags
+/// - ENUMERATED types with explicit discriminant values
+/// - CHOICE types with context-specific tags
+/// - INTEGER types with constraint annotations
+/// - String types (UTF8String, PrintableString, VisibleString, etc.)
+///
+/// **Limitations:**
+/// - Does not support complex constraints or extensibility markers
+/// - Limited support for advanced ASN.1 features like Information Object Classes
+/// - No support for parameterized types or macros
+///
+/// For schemas requiring unsupported features, the function will return an error
+/// and the caller can fall back to copying the schema file directly.
 fn compile_asn1_file(schema_file: &Path, output_path: &Path) -> Result<()> {
     // Read the ASN.1 schema file
     let schema_content = fs::read_to_string(schema_file)
@@ -787,10 +889,12 @@ enum Asn1Type {
     },
     Integer {
         name: String,
+        #[allow(dead_code)]
         constraints: Option<String>,
     },
     String {
         name: String,
+        #[allow(dead_code)]
         string_type: Asn1StringType,
     },
 }
@@ -811,19 +915,27 @@ struct Asn1EnumValue {
 
 #[derive(Debug, Clone)]
 enum Asn1StringType {
-    Utf8String,
-    PrintableString,
-    VisibleString,
-    GeneralString,
+    Utf8,
+    Printable,
+    Visible,
+    General,
 }
 
 #[derive(Debug)]
 struct Asn1Schema {
+    #[allow(dead_code)]
     module_name: String,
     types: Vec<Asn1Type>,
 }
 
-/// Basic ASN.1 schema parser
+/// Basic ASN.1 schema parser implementation.
+///
+/// This parser handles a subset of ASN.1 sufficient for FIX protocol message
+/// extensions and common ASN.1 patterns. It's designed to be simple, reliable,
+/// and compatible with rasn 0.18.x generated code patterns.
+///
+/// The parser uses a simple line-by-line approach with basic pattern matching
+/// rather than a full grammar parser, making it easier to maintain and debug.
 fn parse_asn1_schema(content: &str) -> Result<Asn1Schema> {
     let mut types = Vec::new();
     let mut module_name = "UnknownModule".to_string();
@@ -1023,10 +1135,10 @@ fn parse_integer_type(name: String, type_def: &str) -> Result<Asn1Type> {
 /// Parse string type
 fn parse_string_type(name: String, type_def: &str) -> Result<Asn1Type> {
     let string_type = match type_def {
-        "UTF8String" => Asn1StringType::Utf8String,
-        "PrintableString" => Asn1StringType::PrintableString,
-        "VisibleString" => Asn1StringType::VisibleString,
-        _ => Asn1StringType::GeneralString,
+        "UTF8String" => Asn1StringType::Utf8,
+        "PrintableString" => Asn1StringType::Printable,
+        "VisibleString" => Asn1StringType::Visible,
+        _ => Asn1StringType::General,
     };
 
     Ok(Asn1Type::String { name, string_type })
@@ -1190,3 +1302,39 @@ fn map_asn1_type_to_rust(asn1_type: &str) -> String {
         _ => asn1_type.to_string(), // Custom type, use as-is
     }
 }
+
+//
+// FUTURE IMPROVEMENTS AND MIGRATION CONSIDERATIONS
+//
+// This custom ASN.1 parser implementation can be extended in the following ways:
+//
+// 1. **Enhanced ASN.1 Support**: Add support for advanced constructs like:
+//    - Information Object Classes (IOC)
+//    - Parameterized types and type parameters
+//    - Extensibility markers (...) and version brackets
+//    - Complex constraints (SIZE, range, character set)
+//    - Nested modules and imports
+//
+// 2. **Migration to rasn-compiler**: Consider migrating when:
+//    - rasn-compiler stabilizes compatibility with rasn 0.18.x+
+//    - The RustyFix project upgrades to a newer rasn version
+//    - The maintenance burden of custom parser becomes significant
+//
+// 3. **Performance Optimizations**:
+//    - Implement parallel parsing for multiple schema files
+//    - Cache parsed ASN.1 modules to avoid re-parsing
+//    - Optimize generated code for specific FIX protocol patterns
+//
+// 4. **Better Error Handling**:
+//    - Provide line number information in parser errors
+//    - Add syntax highlighting for error messages
+//    - Implement recovery mechanisms for malformed schemas
+//
+// 5. **Validation and Testing**:
+//    - Add comprehensive test suite for ASN.1 parser
+//    - Implement roundtrip testing (parse -> generate -> parse)
+//    - Add fuzzing support for parser robustness
+//
+// The current implementation prioritizes compatibility and stability over feature completeness.
+// It successfully handles the ASN.1 constructs commonly used in FIX protocol extensions
+// while maintaining seamless integration with rasn 0.18.x and the RustyFix ecosystem.

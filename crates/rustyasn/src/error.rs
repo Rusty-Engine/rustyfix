@@ -203,6 +203,7 @@ impl From<rasn::error::DecodeError> for Error {
 }
 
 /// Extension trait for converting rasn errors with context.
+#[allow(dead_code)]
 pub(crate) trait ErrorContext<T> {
     /// Add context to an error.
     fn context(self, msg: impl Into<FixString>) -> Result<T>;

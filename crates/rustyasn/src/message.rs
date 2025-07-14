@@ -230,35 +230,15 @@ impl Message {
     fn parse_group_entries(
         &self,
         _count_tag: u32,
-        count: usize,
+        _count: usize,
     ) -> Result<Vec<Message>, Box<dyn std::error::Error + Send + Sync>> {
-        // For now, we'll implement a simple version that creates empty group entries
-        // In a full implementation, this would:
+        // TODO: Implement proper repeating group parsing
+        // This requires:
         // 1. Look up the group schema from a dictionary/schema
         // 2. Parse the fields in order based on the group definition
         // 3. Create proper Message instances for each group entry
 
-        let mut entries = Vec::with_capacity(count);
-
-        // Create placeholder entries for now
-        // In practice, these would be parsed from the actual message fields
-        for i in 0..count {
-            // Create a placeholder message for each group entry
-            // This is a simplified implementation - real groups would parse actual field data
-            let entry_msg_type = crate::generated::FixMessageType::from_str("8") // ExecutionReport as placeholder
-                .ok_or("Invalid message type for group entry")?;
-
-            let entry = Message::new(
-                entry_msg_type,
-                format!("GROUP_SENDER_{i}"),
-                format!("GROUP_TARGET_{i}"),
-                i as u64 + 1,
-            );
-
-            entries.push(entry);
-        }
-
-        Ok(entries)
+        Err("Repeating group parsing is not yet implemented. This is a placeholder that needs proper implementation.".into())
     }
 }
 

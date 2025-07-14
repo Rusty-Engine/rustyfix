@@ -490,23 +490,20 @@ impl Schema {
 
     /// Validates UTC timestamp format (YYYYMMDD-HH:MM:SS or YYYYMMDD-HH:MM:SS.sss)
     fn is_valid_utc_timestamp(s: &str) -> bool {
-        // Basic format check: YYYYMMDD-HH:MM:SS (17 chars) or YYYYMMDD-HH:MM:SS.sss (21 chars)
-        if s.len() != 17 && s.len() != 21 {
+        // Check for minimum length and date-time separator
+        if s.len() < 17 || s.get(8..9) != Some("-") {
             return false;
         }
+
+        let (date_str, time_str) = s.split_at(8);
 
         // Check date part (first 8 chars)
-        if !Self::is_valid_utc_date(&s[..8]) {
+        if !Self::is_valid_utc_date(date_str) {
             return false;
         }
 
-        // Check separator
-        if s.chars().nth(8) != Some('-') {
-            return false;
-        }
-
-        // Check time part
-        Self::is_valid_utc_time(&s[9..])
+        // Check time part (after the '-')
+        Self::is_valid_utc_time(&time_str[1..])
     }
 
     /// Validates UTC date format (YYYYMMDD)

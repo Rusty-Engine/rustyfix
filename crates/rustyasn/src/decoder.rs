@@ -100,18 +100,25 @@ impl DecodedMessage {
     }
 
     /// Gets an integer field value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The field value is an unsigned integer that exceeds `i64::MAX`
+    /// - The field value is a string that cannot be parsed as an integer
     pub fn get_int(&self, tag: u32) -> Result<Option<i64>> {
         match self.fields.get(&tag) {
             Some(crate::types::FixFieldValue::Integer(i)) => Ok(Some(*i)),
             Some(crate::types::FixFieldValue::UnsignedInteger(u)) => {
                 // Check for overflow when converting u64 to i64
-                if i64::try_from(*u).is_ok() {
-                    Ok(Some(*u as i64))
-                } else {
-                    Err(Error::Decode(DecodeError::ConstraintViolation {
-                        field: format!("Tag {tag}").into(),
-                        reason: "Unsigned integer value exceeds i64::MAX and cannot be converted to signed integer".into(),
-                    }))
+                match i64::try_from(*u) {
+                    Ok(converted) => Ok(Some(converted)),
+                    Err(_) => {
+                        Err(Error::Decode(DecodeError::ConstraintViolation {
+                            field: format!("Tag {tag}").into(),
+                            reason: "Unsigned integer value exceeds i64::MAX and cannot be converted to signed integer".into(),
+                        }))
+                    }
                 }
             }
             Some(field_value) => {
@@ -128,19 +135,22 @@ impl DecodedMessage {
     }
 
     /// Gets an unsigned integer field value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The field value is a signed integer that is negative
+    /// - The field value is a string that cannot be parsed as an unsigned integer
     pub fn get_uint(&self, tag: u32) -> Result<Option<u64>> {
         match self.fields.get(&tag) {
             Some(crate::types::FixFieldValue::UnsignedInteger(u)) => Ok(Some(*u)),
-            Some(crate::types::FixFieldValue::Integer(i)) => {
-                if *i >= 0 {
-                    Ok(Some(*i as u64))
-                } else {
-                    Err(Error::Decode(DecodeError::ConstraintViolation {
-                        field: format!("Tag {tag}").into(),
-                        reason: "Negative value cannot be converted to unsigned integer".into(),
-                    }))
-                }
-            }
+            Some(crate::types::FixFieldValue::Integer(i)) => match u64::try_from(*i) {
+                Ok(converted) => Ok(Some(converted)),
+                Err(_) => Err(Error::Decode(DecodeError::ConstraintViolation {
+                    field: format!("Tag {tag}").into(),
+                    reason: "Negative value cannot be converted to unsigned integer".into(),
+                })),
+            },
             Some(field_value) => {
                 // Try to parse the string representation of the field value
                 field_value.to_string().parse().map(Some).map_err(|_| {
@@ -198,6 +208,14 @@ impl Decoder {
     }
 
     /// Decodes a single message from bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The input data is empty
+    /// - The message size exceeds the configured maximum
+    /// - The ASN.1 decoding fails due to invalid structure
+    /// - Message validation fails (when enabled)
     pub fn decode(&self, data: &[u8]) -> Result<DecodedMessage> {
         if data.is_empty() {
             return Err(Error::Decode(DecodeError::UnexpectedEof {
@@ -215,7 +233,7 @@ impl Decoder {
         }
 
         // Decode based on encoding rule
-        let fix_msg = self.decode_with_rule(data, self.config.encoding_rule)?;
+        let fix_msg = Self::decode_with_rule(data, self.config.encoding_rule)?;
 
         // Validate if configured
         if self.config.validate_checksums {
@@ -226,7 +244,7 @@ impl Decoder {
     }
 
     /// Decodes using the specified encoding rule.
-    fn decode_with_rule(&self, data: &[u8], rule: EncodingRule) -> Result<FixMessage> {
+    fn decode_with_rule(data: &[u8], rule: EncodingRule) -> Result<FixMessage> {
         match rule {
             EncodingRule::BER => ber_decode::<FixMessage>(data)
                 .map_err(|e| Error::Decode(DecodeError::Internal(e.to_string()))),
@@ -300,6 +318,14 @@ impl DecoderStreaming {
     }
 
     /// Attempts to decode the next message.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - An invalid ASN.1 tag is encountered
+    /// - The message length exceeds the configured maximum
+    /// - The ASN.1 length encoding is invalid
+    /// - The underlying decode operation fails
     pub fn decode_next(&mut self) -> Result<Option<DecodedMessage>> {
         loop {
             match self.state {
@@ -310,7 +336,7 @@ impl DecoderStreaming {
 
                     // Check for ASN.1 tag
                     let tag = self.buffer[0];
-                    if !self.is_valid_asn1_tag(tag) {
+                    if !Self::is_valid_asn1_tag(tag) {
                         return Err(Error::Decode(DecodeError::InvalidTag { tag, offset: 0 }));
                     }
 
@@ -357,7 +383,7 @@ impl DecoderStreaming {
     }
 
     /// Checks if a byte is a valid ASN.1 tag.
-    fn is_valid_asn1_tag(&self, _tag: u8) -> bool {
+    fn is_valid_asn1_tag(_tag: u8) -> bool {
         // Accept a broader range of ASN.1 tags
         // Universal class tags (0x00-0x1F) are all valid
         // Application class (0x40-0x7F) are valid

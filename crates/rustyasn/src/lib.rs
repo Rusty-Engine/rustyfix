@@ -15,6 +15,48 @@
 //! - Integration with `RustyFix` field types
 //! - High-performance implementation optimized for low-latency trading
 //!
+//! ## ASN.1 Schema Compilation
+//!
+//! This crate uses a **custom ASN.1 parser implementation** in its build script rather than
+//! the standard [`rasn-compiler`](https://crates.io/crates/rasn-compiler) crate. This
+//! architectural decision was made due to version compatibility issues:
+//!
+//! ### Why Custom Parser?
+//!
+//! - **Version Incompatibility**: The rasn-compiler crate has compatibility issues with
+//!   rasn 0.18.x, which is used throughout the `RustyFix` project. Using rasn-compiler
+//!   would require either downgrading rasn or dealing with breaking API changes.
+//!
+//! - **FIX-Specific Optimizations**: The custom parser is tailored for FIX protocol
+//!   message structures and generates code that integrates seamlessly with `RustyFix`'s
+//!   type system and performance requirements.
+//!
+//! - **Build Stability**: The custom implementation is immune to breaking changes in
+//!   rasn-compiler updates, ensuring consistent builds across environments.
+//!
+//! - **Reduced Dependencies**: Eliminates rasn-compiler and its transitive dependencies,
+//!   reducing build complexity and potential security surface.
+//!
+//! ### Supported ASN.1 Features
+//!
+//! The custom parser supports the ASN.1 constructs commonly used in FIX protocol extensions:
+//!
+//! - SEQUENCE types with optional fields and explicit tags
+//! - ENUMERATED types with explicit discriminant values  
+//! - CHOICE types with context-specific tags
+//! - INTEGER types with constraint annotations
+//! - String types (`UTF8String`, `PrintableString`, `VisibleString`, etc.)
+//!
+//! ### Migration Path
+//!
+//! Future migration to rasn-compiler will be considered when:
+//! - rasn-compiler achieves stable compatibility with rasn 0.18.x+
+//! - The `RustyFix` project upgrades to a newer rasn version
+//! - The maintenance burden of the custom parser becomes significant
+//!
+//! For complex ASN.1 schemas requiring advanced features not implemented in the custom
+//! parser, the build script provides fallback mechanisms and clear error messages.
+//!
 //! ## Usage
 //!
 //! ```rust,no_run
