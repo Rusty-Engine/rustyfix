@@ -1,0 +1,28 @@
+-- Sample ASN.1 schema for FIX message extensions
+-- Place custom ASN.1 schemas in this directory for automatic compilation
+
+FixExtensions DEFINITIONS ::= BEGIN
+
+-- Custom message types
+CustomMessageType ::= ENUMERATED {
+    customHeartbeat(0),
+    customLogon(1),
+    customLogout(2)
+}
+
+-- Custom field definitions  
+CustomField ::= SEQUENCE {
+    tag     INTEGER (1..9999),
+    value   UTF8String
+}
+
+-- Extended message structure
+ExtendedFixMessage ::= SEQUENCE {
+    msgType         CustomMessageType,
+    senderCompId    UTF8String,
+    targetCompId    UTF8String,
+    msgSeqNum       INTEGER (1..999999999),
+    customFields    SEQUENCE OF CustomField OPTIONAL
+}
+
+END

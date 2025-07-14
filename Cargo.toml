@@ -12,7 +12,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-authors = ["cognitive-glitch", "Team Rusty Trading", "Filippo Neysofu Costa"]
+authors = ["cognitive-glitch", "Rusty Trading Team", "Filippo Neysofu Costa"]
 version = "0.7.4"
 edition = "2024"
 homepage = "https://github.com/rusty-trading/rusty-fix-engine"
@@ -31,6 +31,7 @@ keywords = [
     "trading",
     "finance",
     "fintech",
+    "hft",
 ]
 categories = [
     "network-programming",
@@ -41,6 +42,10 @@ categories = [
     "fix-protocol",
     "quickfix",
     "fast",
+    "trading",
+    "protocol",
+    "hft",
+    "high-frequency-trading",
 ]
 license = "Apache-2.0"
 
