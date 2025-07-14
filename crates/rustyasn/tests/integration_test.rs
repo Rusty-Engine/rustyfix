@@ -39,8 +39,11 @@ fn test_basic_encoding_decoding() {
         // Verify custom fields
         assert_eq!(decoded.get_string(11), Some("CL001".to_string()));
         assert_eq!(decoded.get_string(55), Some("EUR/USD".to_string()));
-        assert_eq!(decoded.get_int(54), Some(1));
-        assert_eq!(decoded.get_uint(38), Some(1_000_000));
+        assert_eq!(decoded.get_int(54).expect("Should parse int"), Some(1));
+        assert_eq!(
+            decoded.get_uint(38).expect("Should parse uint"),
+            Some(1_000_000)
+        );
     }
 }
 
@@ -142,8 +145,11 @@ fn test_field_types() {
 
     assert_eq!(decoded.get_bool(114), Some(true));
     assert_eq!(decoded.get_string(95), Some("test_data".to_string()));
-    assert_eq!(decoded.get_int(31), Some(-100));
-    assert_eq!(decoded.get_uint(14), Some(500_000));
+    assert_eq!(decoded.get_int(31).expect("Should parse int"), Some(-100));
+    assert_eq!(
+        decoded.get_uint(14).expect("Should parse uint"),
+        Some(500_000)
+    );
 }
 
 #[test]

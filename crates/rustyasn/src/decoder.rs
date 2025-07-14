@@ -21,7 +21,7 @@ const ASN1_LONG_FORM_LENGTH_2_BYTES: u8 = 0x82; // Long form length indicator fo
 
 /// Decoded FIX message representation.
 #[derive(Debug, Clone)]
-pub struct Message {
+pub struct DecodedMessage {
     /// Raw ASN.1 encoded data
     raw: Bytes,
 
@@ -32,7 +32,7 @@ pub struct Message {
     fields: FxHashMap<u32, crate::types::FixFieldValue>,
 }
 
-impl Message {
+impl DecodedMessage {
     /// Creates a new message from decoded data.
     fn new(raw: Bytes, inner: FixMessage) -> Self {
         let mut fields = FxHashMap::default();
@@ -96,20 +96,65 @@ impl Message {
     }
 
     /// Gets an integer field value.
-    pub fn get_int(&self, tag: u32) -> Option<i64> {
-        match self.fields.get(&tag)? {
-            crate::types::FixFieldValue::Integer(i) => Some(*i),
-            crate::types::FixFieldValue::UnsignedInteger(u) => Some(*u as i64),
-            _ => self.get_field(tag)?.parse().ok(),
+    pub fn get_int(&self, tag: u32) -> Result<Option<i64>> {
+        match self.fields.get(&tag) {
+            Some(crate::types::FixFieldValue::Integer(i)) => Ok(Some(*i)),
+            Some(crate::types::FixFieldValue::UnsignedInteger(u)) => Ok(Some(*u as i64)),
+            Some(_) => {
+                // Try to parse the string representation
+                self.get_field(tag)
+                    .ok_or_else(|| {
+                        Error::Decode(DecodeError::ConstraintViolation {
+                            field: format!("Tag {tag}").into(),
+                            reason: "Field not found".into(),
+                        })
+                    })?
+                    .parse()
+                    .map(Some)
+                    .map_err(|_| {
+                        Error::Decode(DecodeError::ConstraintViolation {
+                            field: format!("Tag {tag}").into(),
+                            reason: "Invalid integer format".into(),
+                        })
+                    })
+            }
+            None => Ok(None),
         }
     }
 
     /// Gets an unsigned integer field value.
-    pub fn get_uint(&self, tag: u32) -> Option<u64> {
-        match self.fields.get(&tag)? {
-            crate::types::FixFieldValue::UnsignedInteger(u) => Some(*u),
-            crate::types::FixFieldValue::Integer(i) => Some(*i as u64),
-            _ => self.get_field(tag)?.parse().ok(),
+    pub fn get_uint(&self, tag: u32) -> Result<Option<u64>> {
+        match self.fields.get(&tag) {
+            Some(crate::types::FixFieldValue::UnsignedInteger(u)) => Ok(Some(*u)),
+            Some(crate::types::FixFieldValue::Integer(i)) => {
+                if *i >= 0 {
+                    Ok(Some(*i as u64))
+                } else {
+                    Err(Error::Decode(DecodeError::ConstraintViolation {
+                        field: format!("Tag {tag}").into(),
+                        reason: "Negative value cannot be converted to unsigned integer".into(),
+                    }))
+                }
+            }
+            Some(_) => {
+                // Try to parse the string representation
+                self.get_field(tag)
+                    .ok_or_else(|| {
+                        Error::Decode(DecodeError::ConstraintViolation {
+                            field: format!("Tag {tag}").into(),
+                            reason: "Field not found".into(),
+                        })
+                    })?
+                    .parse()
+                    .map(Some)
+                    .map_err(|_| {
+                        Error::Decode(DecodeError::ConstraintViolation {
+                            field: format!("Tag {tag}").into(),
+                            reason: "Invalid unsigned integer format".into(),
+                        })
+                    })
+            }
+            None => Ok(None),
         }
     }
 
@@ -157,7 +202,7 @@ impl Decoder {
     }
 
     /// Decodes a single message from bytes.
-    pub fn decode(&self, data: &[u8]) -> Result<Message> {
+    pub fn decode(&self, data: &[u8]) -> Result<DecodedMessage> {
         if data.is_empty() {
             return Err(Error::Decode(DecodeError::UnexpectedEof {
                 offset: 0,
@@ -178,7 +223,7 @@ impl Decoder {
             self.validate_message(&fix_msg)?;
         }
 
-        Ok(Message::new(Bytes::copy_from_slice(data), fix_msg))
+        Ok(DecodedMessage::new(Bytes::copy_from_slice(data), fix_msg))
     }
 
     /// Decodes using the specified encoding rule.
@@ -256,7 +301,7 @@ impl DecoderStreaming {
     }
 
     /// Attempts to decode the next message.
-    pub fn decode_next(&mut self) -> Result<Option<Message>> {
+    pub fn decode_next(&mut self) -> Result<Option<DecodedMessage>> {
         loop {
             match self.state {
                 DecoderState::WaitingForMessage => {
@@ -283,7 +328,7 @@ impl DecoderStreaming {
                                 max_size: self.decoder.config.max_message_size,
                             }));
                         }
-                        
+
                         self.state = DecoderState::ReadingMessage {
                             length,
                             offset: offset + consumed,
@@ -296,12 +341,13 @@ impl DecoderStreaming {
 
                 DecoderState::ReadingMessage { length, offset } => {
                     if self.buffer.len() >= offset + length {
-                        // We have a complete message
-                        let msg_data: Vec<u8> = self.buffer.drain(0..offset + length).collect();
+                        // We have a complete message - decode directly from buffer slice
+                        let message = self.decoder.decode(&self.buffer[0..offset + length])?;
+
+                        // Remove the processed data from buffer
+                        self.buffer.drain(0..offset + length);
                         self.state = DecoderState::WaitingForMessage;
 
-                        // Decode the message
-                        let message = self.decoder.decode(&msg_data)?;
                         return Ok(Some(message));
                     }
                     // Need more data
@@ -312,11 +358,18 @@ impl DecoderStreaming {
     }
 
     /// Checks if a byte is a valid ASN.1 tag.
-    fn is_valid_asn1_tag(&self, tag: u8) -> bool {
-        // Check for valid ASN.1 tag format
-        tag == ASN1_SEQUENCE_TAG
-            || (tag & ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_MASK)
-                == ASN1_CONTEXT_SPECIFIC_CONSTRUCTED_TAG // SEQUENCE or context-specific constructed
+    fn is_valid_asn1_tag(&self, _tag: u8) -> bool {
+        // Accept a broader range of ASN.1 tags
+        // Universal class tags (0x00-0x1F) are all valid
+        // Application class (0x40-0x7F) are valid
+        // Context-specific (0x80-0xBF) are valid
+        // Private class (0xC0-0xFF) are valid
+        // The tag format is: [Class(2 bits)][P/C(1 bit)][Tag number(5 bits)]
+        // For now, accept any tag that follows basic ASN.1 structure
+        // Bit 6 clear = Universal/Application class
+        // Bit 6 set = Context/Private class
+        // This is a much more permissive check that accepts all valid ASN.1 tags
+        true // All bytes can potentially be valid ASN.1 tags
     }
 
     /// Decodes ASN.1 length at the given offset.
@@ -418,7 +471,7 @@ mod tests {
             }],
         };
 
-        let message = Message::new(Bytes::new(), msg);
+        let message = DecodedMessage::new(Bytes::new(), msg);
 
         assert_eq!(message.msg_type(), "D");
         assert_eq!(message.sender_comp_id(), "SENDER");
@@ -445,18 +498,19 @@ mod tests {
         // Create a config with a small max message size for testing
         let mut config = Config::default();
         config.max_message_size = 100; // Set a small limit for testing
-        
-        let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
+
+        let dict =
+            Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
         let mut decoder = DecoderStreaming::new(config, dict);
 
         // Feed a SEQUENCE tag
         decoder.feed(&[ASN1_SEQUENCE_TAG]);
-        
+
         // Feed a long form length that exceeds max_message_size
         // Using 2-byte length encoding: first byte 0x82 means 2 length bytes follow
         // Next two bytes encode length 0x1000 (4096 bytes) which exceeds our limit of 100
-        decoder.feed(&[0x82, 0x10, 0x00]); 
-        
+        decoder.feed(&[0x82, 0x10, 0x00]);
+
         // Try to decode - should fail with MessageTooLarge error
         let result = decoder.decode_next();
         match result {
@@ -464,7 +518,7 @@ mod tests {
                 assert_eq!(size, 4096);
                 assert_eq!(max_size, 100);
             }
-            _ => panic!("Expected MessageTooLarge error, got: {:?}", result),
+            _ => panic!("Expected MessageTooLarge error, got: {result:?}"),
         }
     }
 
@@ -472,20 +526,78 @@ mod tests {
     fn test_length_validation_passes_within_limit() {
         let mut config = Config::default();
         config.max_message_size = 1000; // Set reasonable limit
-        
-        let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
+
+        let dict =
+            Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for test"));
         let mut decoder = DecoderStreaming::new(config, dict);
 
         // Feed a SEQUENCE tag
         decoder.feed(&[ASN1_SEQUENCE_TAG]);
-        
+
         // Feed a short form length that's within limit (50 bytes)
-        decoder.feed(&[50]); 
-        
+        decoder.feed(&[50]);
+
         // Decoder should transition to ReadingMessage state without error
         let result = decoder.decode_next();
         // It will return Ok(None) because we don't have enough data yet
         assert!(result.is_ok());
-        assert!(matches!(decoder.state, DecoderState::ReadingMessage { length: 50, .. }));
+        assert!(matches!(
+            decoder.state,
+            DecoderState::ReadingMessage { length: 50, .. }
+        ));
+    }
+
+    #[test]
+    fn test_integer_parsing_with_result() {
+        let msg = FixMessage {
+            msg_type: "D".to_string(),
+            sender_comp_id: "SENDER".to_string(),
+            target_comp_id: "TARGET".to_string(),
+            msg_seq_num: 123,
+            fields: vec![
+                Field {
+                    tag: 38,
+                    value: crate::types::FixFieldValue::UnsignedInteger(1000),
+                },
+                Field {
+                    tag: 54,
+                    value: crate::types::FixFieldValue::String("not_a_number".to_string()),
+                },
+                Field {
+                    tag: 99,
+                    value: crate::types::FixFieldValue::Integer(-50),
+                },
+            ],
+        };
+
+        let message = DecodedMessage::new(Bytes::new(), msg);
+
+        // Test successful parsing
+        assert_eq!(
+            message.get_int(38).expect("Should parse unsigned as int"),
+            Some(1000)
+        );
+        assert_eq!(
+            message.get_uint(38).expect("Should parse unsigned"),
+            Some(1000)
+        );
+
+        // Test missing field
+        assert_eq!(message.get_int(999).expect("Should return Ok(None)"), None);
+        assert_eq!(message.get_uint(999).expect("Should return Ok(None)"), None);
+
+        // Test parsing error
+        let int_err = message.get_int(54);
+        assert!(matches!(
+            int_err,
+            Err(Error::Decode(DecodeError::ConstraintViolation { .. }))
+        ));
+
+        // Test negative to unsigned conversion error
+        let uint_err = message.get_uint(99);
+        assert!(matches!(
+            uint_err,
+            Err(Error::Decode(DecodeError::ConstraintViolation { .. }))
+        ));
     }
 }

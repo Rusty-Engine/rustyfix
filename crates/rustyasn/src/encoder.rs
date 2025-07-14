@@ -44,10 +44,7 @@ impl Encoder {
     pub fn new(config: Config, dictionary: Arc<Dictionary>) -> Self {
         let schema = Arc::new(Schema::new(dictionary));
 
-        Self {
-            config,
-            schema,
-        }
+        Self { config, schema }
     }
 
     /// Starts encoding a new message.

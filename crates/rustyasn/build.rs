@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 /// Does not add prefix for numeric message types since they'll be used after an underscore.
 fn sanitize_identifier(input: &str) -> String {
     let mut result = String::new();
-    
+
     for ch in input.chars() {
         if ch.is_ascii_alphanumeric() {
             result.push(ch);
@@ -22,12 +22,12 @@ fn sanitize_identifier(input: &str) -> String {
             result.push('_');
         }
     }
-    
+
     // Ensure result is not empty
     if result.is_empty() {
         result = "_".to_string();
     }
-    
+
     result
 }
 
@@ -136,9 +136,12 @@ pub enum FixMessageType {
     for message in dictionary.messages() {
         let msg_type = message.msg_type();
         let name = message.name();
-        let sanitized_msg_type = sanitize_identifier(&msg_type);
+        let sanitized_msg_type = sanitize_identifier(msg_type);
         // For clean alphanumeric message types, concatenate without underscore for better Rust naming
-        let mut enum_name = if sanitized_msg_type.chars().all(|c| c.is_ascii_alphanumeric()) {
+        let mut enum_name = if sanitized_msg_type
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric())
+        {
             format!("{}{}", name.to_pascal_case(), sanitized_msg_type)
         } else {
             // Use underscore for complex sanitized types (those with replaced characters)
@@ -148,10 +151,18 @@ pub enum FixMessageType {
         // Handle name collisions
         let mut counter = 1;
         while used_names.contains(&enum_name) {
-            if sanitized_msg_type.chars().all(|c| c.is_ascii_alphanumeric()) {
+            if sanitized_msg_type
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric())
+            {
                 enum_name = format!("{}{}{}", name.to_pascal_case(), sanitized_msg_type, counter);
             } else {
-                enum_name = format!("{}_{}{}", name.to_pascal_case(), sanitized_msg_type, counter);
+                enum_name = format!(
+                    "{}_{}{}",
+                    name.to_pascal_case(),
+                    sanitized_msg_type,
+                    counter
+                );
             }
             counter += 1;
         }
