@@ -15,6 +15,22 @@ use smartstring::{LazyCompact, SmartString};
 type FixString = SmartString<LazyCompact>;
 use std::sync::Arc;
 
+// Size estimation constants for performance and maintainability
+/// Base overhead for ASN.1 message structure including message sequence number encoding
+const BASE_ASN1_OVERHEAD: usize = 20;
+
+/// Conservative estimate for ASN.1 tag encoding size (handles up to 5-digit tag numbers)
+const TAG_ENCODING_SIZE: usize = 5;
+
+/// Size estimate for integer field values (i64/u64 can be up to 8 bytes when encoded)
+const INTEGER_ESTIMATE_SIZE: usize = 8;
+
+/// Size for boolean field values (single byte: Y or N)
+const BOOLEAN_SIZE: usize = 1;
+
+/// ASN.1 TLV (Tag-Length-Value) encoding overhead per field
+const FIELD_TLV_OVERHEAD: usize = 5;
+
 /// ASN.1 encoder for FIX messages.
 pub struct Encoder {
     config: Config,
@@ -270,8 +286,37 @@ impl EncoderHandle<'_> {
 
     /// Estimates the encoded size of the message.
     fn estimate_size(&self) -> usize {
-        // Basic estimation: header + fields
-        100 + self.message.fields.len() * 20
+        // More accurate estimation based on actual field content
+        let base_size = self.message.sender_comp_id.len()
+            + self.message.target_comp_id.len()
+            + self.message.msg_type.len()
+            + BASE_ASN1_OVERHEAD; // for msg_seq_num and ASN.1 overhead
+
+        let fields_size = self
+            .message
+            .fields
+            .iter()
+            .map(|field| {
+                // Each field has tag number + value + ASN.1 encoding overhead
+                let tag_size = TAG_ENCODING_SIZE; // Conservative estimate for tag encoding
+                let value_size = match &field.value {
+                    crate::types::FixFieldValue::String(s) => s.len(),
+                    crate::types::FixFieldValue::Decimal(s) => s.len(),
+                    crate::types::FixFieldValue::Character(s) => s.len(),
+                    crate::types::FixFieldValue::UtcTimestamp(s) => s.len(),
+                    crate::types::FixFieldValue::UtcDate(s) => s.len(),
+                    crate::types::FixFieldValue::UtcTime(s) => s.len(),
+                    crate::types::FixFieldValue::Raw(s) => s.len(),
+                    crate::types::FixFieldValue::Integer(_) => INTEGER_ESTIMATE_SIZE, // i64 estimate
+                    crate::types::FixFieldValue::UnsignedInteger(_) => INTEGER_ESTIMATE_SIZE, // u64 estimate
+                    crate::types::FixFieldValue::Boolean(_) => BOOLEAN_SIZE,
+                    crate::types::FixFieldValue::Data(data) => data.len(),
+                };
+                tag_size + value_size + FIELD_TLV_OVERHEAD // ASN.1 TLV overhead per field
+            })
+            .sum::<usize>();
+
+        base_size + fields_size
     }
 }
 

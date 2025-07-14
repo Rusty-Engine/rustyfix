@@ -189,16 +189,21 @@ impl FixFieldValue {
     }
 
     /// Create a `FixFieldValue` from bytes and field type information.
+    /// This method is optimized to avoid unnecessary string conversions for binary data types.
     pub fn from_bytes_with_type(
         value: &[u8],
         fix_type: crate::schema::FixDataType,
     ) -> Result<Self, String> {
         use crate::schema::FixDataType;
 
-        let s = String::from_utf8_lossy(value).to_string();
-
         match fix_type {
+            // Handle binary data types first to avoid string conversion
+            FixDataType::Data | FixDataType::XmlData => Ok(FixFieldValue::Data(value.to_vec())),
+
+            // For numeric types, parse directly from bytes to avoid string allocation
             FixDataType::Int => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for integer field".to_string())?;
                 let i = s
                     .parse::<i64>()
                     .map_err(|_| format!("Invalid integer: {s}"))?;
@@ -209,6 +214,8 @@ impl FixFieldValue {
             | FixDataType::SeqNum
             | FixDataType::TagNum
             | FixDataType::DayOfMonth => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for unsigned integer field".to_string())?;
                 let u = s
                     .parse::<u64>()
                     .map_err(|_| format!("Invalid unsigned integer: {s}"))?;
@@ -220,31 +227,70 @@ impl FixFieldValue {
             | FixDataType::PriceOffset
             | FixDataType::Amt
             | FixDataType::Percentage => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for decimal field".to_string())?;
                 // Validate as decimal but store as string to preserve precision
                 s.parse::<f64>()
                     .map_err(|_| format!("Invalid decimal: {s}"))?;
-                Ok(FixFieldValue::Decimal(s))
+                Ok(FixFieldValue::Decimal(s.to_string()))
             }
             FixDataType::Char => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for character field".to_string())?;
                 if s.len() != 1 {
                     return Err(format!(
                         "Character field must be exactly 1 character, got: {s}"
                     ));
                 }
-                Ok(FixFieldValue::Character(s))
+                Ok(FixFieldValue::Character(s.to_string()))
             }
-            FixDataType::Boolean => match s.as_str() {
-                "Y" => Ok(FixFieldValue::Boolean(true)),
-                "N" => Ok(FixFieldValue::Boolean(false)),
-                _ => Err(format!("Boolean field must be Y or N, got: {s}")),
+            FixDataType::Boolean => match value {
+                b"Y" => Ok(FixFieldValue::Boolean(true)),
+                b"N" => Ok(FixFieldValue::Boolean(false)),
+                _ => {
+                    let s = std::str::from_utf8(value)
+                        .map_err(|_| "Invalid UTF-8 for boolean field".to_string())?;
+                    Err(format!("Boolean field must be Y or N, got: {s}"))
+                }
             },
-            FixDataType::UtcTimestamp => Ok(FixFieldValue::UtcTimestamp(s)),
-            FixDataType::UtcDateOnly | FixDataType::LocalMktDate => Ok(FixFieldValue::UtcDate(s)),
-            FixDataType::UtcTimeOnly | FixDataType::TzTimeOnly => Ok(FixFieldValue::UtcTime(s)),
-            FixDataType::TzTimestamp => Ok(FixFieldValue::UtcTimestamp(s)),
-            FixDataType::Data | FixDataType::XmlData => Ok(FixFieldValue::Data(value.to_vec())),
-            _ => Ok(FixFieldValue::String(s)),
+            // For timestamp/date/time types, convert to string but validate UTF-8 first
+            FixDataType::UtcTimestamp | FixDataType::TzTimestamp => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for timestamp field".to_string())?;
+                Ok(FixFieldValue::UtcTimestamp(s.to_string()))
+            }
+            FixDataType::UtcDateOnly | FixDataType::LocalMktDate => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for date field".to_string())?;
+                Ok(FixFieldValue::UtcDate(s.to_string()))
+            }
+            FixDataType::UtcTimeOnly | FixDataType::TzTimeOnly => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for time field".to_string())?;
+                Ok(FixFieldValue::UtcTime(s.to_string()))
+            }
+            // Default to string for other types
+            _ => {
+                let s = std::str::from_utf8(value)
+                    .map_err(|_| "Invalid UTF-8 for string field".to_string())?;
+                Ok(FixFieldValue::String(s.to_string()))
+            }
         }
+    }
+
+    /// Create a `FixFieldValue` from bytes using schema type information.
+    /// This is the preferred method when schema/dictionary type information is available.
+    pub fn from_bytes_with_schema(
+        value: &[u8],
+        tag: u16,
+        schema: &crate::schema::Schema,
+    ) -> Result<Self, crate::Error> {
+        let field_info = schema
+            .get_field_type(tag)
+            .ok_or_else(|| crate::Error::Schema(format!("Unknown field tag: {tag}").into()))?;
+
+        Self::from_bytes_with_type(value, field_info.fix_type)
+            .map_err(|e| crate::Error::Schema(e.into()))
     }
 }
 
@@ -305,6 +351,9 @@ impl ToFixFieldValue for Decimal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::{FixDataType, Schema};
+    use rustyfix_dictionary::Dictionary;
+    use std::sync::Arc;
 
     #[test]
     fn test_field_value_conversions() {
@@ -336,5 +385,275 @@ mod tests {
             msg.fields[0].value,
             FixFieldValue::String("EUR/USD".to_string())
         );
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_integer() {
+        let result = FixFieldValue::from_bytes_with_type(b"42", FixDataType::Int);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Integer(42));
+
+        let result = FixFieldValue::from_bytes_with_type(b"-123", FixDataType::Int);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Integer(-123));
+
+        // Test invalid integer
+        let result = FixFieldValue::from_bytes_with_type(b"abc", FixDataType::Int);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_unsigned_integer() {
+        let result = FixFieldValue::from_bytes_with_type(b"123", FixDataType::Length);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::UnsignedInteger(123));
+
+        let result = FixFieldValue::from_bytes_with_type(b"0", FixDataType::SeqNum);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::UnsignedInteger(0));
+
+        // Test invalid unsigned integer
+        let result = FixFieldValue::from_bytes_with_type(b"-1", FixDataType::Length);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_decimal() {
+        let result = FixFieldValue::from_bytes_with_type(b"123.45", FixDataType::Price);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::Decimal("123.45".to_string())
+        );
+
+        let result = FixFieldValue::from_bytes_with_type(b"0.001", FixDataType::Percentage);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Decimal("0.001".to_string()));
+
+        // Test invalid decimal
+        let result = FixFieldValue::from_bytes_with_type(b"abc", FixDataType::Float);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_boolean() {
+        let result = FixFieldValue::from_bytes_with_type(b"Y", FixDataType::Boolean);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Boolean(true));
+
+        let result = FixFieldValue::from_bytes_with_type(b"N", FixDataType::Boolean);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Boolean(false));
+
+        // Test invalid boolean
+        let result = FixFieldValue::from_bytes_with_type(b"X", FixDataType::Boolean);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_character() {
+        let result = FixFieldValue::from_bytes_with_type(b"A", FixDataType::Char);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Character("A".to_string()));
+
+        // Test invalid character (multiple characters)
+        let result = FixFieldValue::from_bytes_with_type(b"AB", FixDataType::Char);
+        assert!(result.is_err());
+
+        // Test empty character
+        let result = FixFieldValue::from_bytes_with_type(b"", FixDataType::Char);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_timestamp() {
+        let result =
+            FixFieldValue::from_bytes_with_type(b"20240101-12:30:45", FixDataType::UtcTimestamp);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::UtcTimestamp("20240101-12:30:45".to_string())
+        );
+
+        let result =
+            FixFieldValue::from_bytes_with_type(b"20240101-12:30:45.123", FixDataType::TzTimestamp);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::UtcTimestamp("20240101-12:30:45.123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_date() {
+        let result = FixFieldValue::from_bytes_with_type(b"20240101", FixDataType::UtcDateOnly);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::UtcDate("20240101".to_string())
+        );
+
+        let result = FixFieldValue::from_bytes_with_type(b"20241231", FixDataType::LocalMktDate);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::UtcDate("20241231".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_time() {
+        let result = FixFieldValue::from_bytes_with_type(b"12:30:45", FixDataType::UtcTimeOnly);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::UtcTime("12:30:45".to_string())
+        );
+
+        let result = FixFieldValue::from_bytes_with_type(b"12:30:45.123", FixDataType::TzTimeOnly);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::UtcTime("12:30:45.123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_binary_data() {
+        let binary_data = vec![0x01, 0x02, 0x03, 0xFF];
+        let result = FixFieldValue::from_bytes_with_type(&binary_data, FixDataType::Data);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Data(binary_data.clone()));
+
+        let xml_data = b"<xml>test</xml>";
+        let result = FixFieldValue::from_bytes_with_type(xml_data, FixDataType::XmlData);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Data(xml_data.to_vec()));
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_string() {
+        let result = FixFieldValue::from_bytes_with_type(b"EUR/USD", FixDataType::String);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FixFieldValue::String("EUR/USD".to_string())
+        );
+
+        let result = FixFieldValue::from_bytes_with_type(b"NYSE", FixDataType::Exchange);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::String("NYSE".to_string()));
+
+        let result = FixFieldValue::from_bytes_with_type(b"USD", FixDataType::Currency);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::String("USD".to_string()));
+    }
+
+    #[test]
+    fn test_from_bytes_with_type_invalid_utf8() {
+        // Test invalid UTF-8 for string types
+        let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
+        let result = FixFieldValue::from_bytes_with_type(&invalid_utf8, FixDataType::String);
+        assert!(result.is_err());
+
+        let result = FixFieldValue::from_bytes_with_type(&invalid_utf8, FixDataType::Int);
+        assert!(result.is_err());
+
+        // But should work for binary data
+        let result = FixFieldValue::from_bytes_with_type(&invalid_utf8, FixDataType::Data);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Data(invalid_utf8));
+    }
+
+    #[test]
+    fn test_from_bytes_with_schema() {
+        let dict = Arc::new(Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary"));
+        let schema = Schema::new(dict);
+
+        // Test with MsgSeqNum (tag 34) - should be SeqNum type
+        let result = FixFieldValue::from_bytes_with_schema(b"123", 34, &schema);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::UnsignedInteger(123));
+
+        // Test with MsgType (tag 35) - should be String type
+        let result = FixFieldValue::from_bytes_with_schema(b"D", 35, &schema);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::String("D".to_string()));
+
+        // Test with unknown tag
+        let result = FixFieldValue::from_bytes_with_schema(b"test", 9999, &schema);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_optimization_binary_data_no_string_conversion() {
+        // Test that binary data doesn't go through string conversion
+        let binary_data = vec![0x00, 0x01, 0x02, 0xFF, 0xFE, 0xFD]; // Invalid UTF-8
+        let result = FixFieldValue::from_bytes_with_type(&binary_data, FixDataType::Data);
+        assert!(result.is_ok());
+        if let FixFieldValue::Data(data) = result.unwrap() {
+            assert_eq!(data, binary_data);
+        } else {
+            panic!("Expected Data variant");
+        }
+    }
+
+    #[test]
+    fn test_optimization_boolean_byte_comparison() {
+        // Test that boolean comparison uses byte arrays directly
+        let result = FixFieldValue::from_bytes_with_type(b"Y", FixDataType::Boolean);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Boolean(true));
+
+        let result = FixFieldValue::from_bytes_with_type(b"N", FixDataType::Boolean);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), FixFieldValue::Boolean(false));
+    }
+
+    #[test]
+    fn test_performance_comparison_from_string_vs_from_bytes_with_type() {
+        // This test demonstrates the inefficiency of from_string vs the optimized method
+        let test_cases = vec![
+            (
+                b"42".as_slice(),
+                FixDataType::Int,
+                FixFieldValue::Integer(42),
+            ),
+            (
+                b"123".as_slice(),
+                FixDataType::Length,
+                FixFieldValue::UnsignedInteger(123),
+            ),
+            (
+                b"Y".as_slice(),
+                FixDataType::Boolean,
+                FixFieldValue::Boolean(true),
+            ),
+            (
+                b"EUR/USD".as_slice(),
+                FixDataType::String,
+                FixFieldValue::String("EUR/USD".to_string()),
+            ),
+        ];
+
+        for (bytes, fix_type, expected) in test_cases {
+            // Test optimized method
+            let result_optimized = FixFieldValue::from_bytes_with_type(bytes, fix_type);
+            assert!(result_optimized.is_ok());
+            assert_eq!(result_optimized.unwrap(), expected);
+
+            // Test legacy method (string inference) - should still work but is less efficient
+            let string_value = String::from_utf8_lossy(bytes).to_string();
+            let result_legacy = FixFieldValue::from_string(string_value);
+            // Note: from_string might infer different types than the explicit type,
+            // so we don't assert equality here, just that it works
+            assert!(matches!(
+                result_legacy,
+                FixFieldValue::Integer(_)
+                    | FixFieldValue::UnsignedInteger(_)
+                    | FixFieldValue::Boolean(_)
+                    | FixFieldValue::String(_)
+            ));
+        }
     }
 }

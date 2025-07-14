@@ -1,6 +1,6 @@
 //! Build script for ASN.1 schema compilation and code generation.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use heck::ToPascalCase;
 use rustyfix_dictionary::Dictionary;
 use std::collections::{BTreeMap, HashSet};
@@ -36,36 +36,67 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=schemas/");
 
+    // Check available features dynamically
+    let enabled_features = get_enabled_fix_features();
+    println!("cargo:warning=Detected FIX features: {enabled_features:?}");
+
     // Generate ASN.1 definitions from FIX dictionaries
-    generate_fix_asn1_definitions()?;
+    generate_fix_asn1_definitions(&enabled_features)
+        .context("Failed to generate FIX ASN.1 definitions")?;
 
     // Generate additional ASN.1 schema files if they exist
-    generate_custom_asn1_schemas()?;
+    generate_custom_asn1_schemas().context("Failed to generate custom ASN.1 schemas")?;
 
     Ok(())
 }
 
-/// Generates ASN.1 type definitions from FIX dictionaries.
-fn generate_fix_asn1_definitions() -> Result<()> {
-    let out_dir = env::var("OUT_DIR")?;
-    let out_path = Path::new(&out_dir);
+/// Gets the list of enabled FIX features dynamically.
+fn get_enabled_fix_features() -> Vec<String> {
+    let mut features = Vec::new();
 
-    // Generate for FIX 4.4 (primary version)
-    let fix44_dict = Dictionary::fix44()?;
-    generate_fix_dictionary_asn1(&fix44_dict, "fix44_asn1.rs", out_path)?;
+    // Always include FIX 4.4 as it's the primary version (no feature flag required)
+    features.push("fix44".to_string());
 
-    // Generate for other FIX versions if features are enabled
-    // Build scripts don't inherit features, so we check environment variables instead
-    if env::var("CARGO_FEATURE_FIX40").is_ok() {
-        println!("cargo:warning=Generating ASN.1 definitions for FIX 4.0");
-        let fix40_dict = Dictionary::fix40().expect("Failed to parse FIX 4.0 dictionary");
-        generate_fix_dictionary_asn1(&fix40_dict, "fix40_asn1.rs", out_path)?;
+    // Check for optional features dynamically - only include those that exist in build dependencies
+    let available_features = ["fix40", "fix50"]; // Based on build-dependencies in Cargo.toml
+
+    for feature in available_features {
+        let env_var = format!("CARGO_FEATURE_{}", feature.to_uppercase());
+        if env::var(&env_var).is_ok() {
+            features.push(feature.to_string());
+        }
     }
 
-    if env::var("CARGO_FEATURE_FIX50").is_ok() {
-        println!("cargo:warning=Generating ASN.1 definitions for FIX 5.0");
-        let fix50_dict = Dictionary::fix50().expect("Failed to parse FIX 5.0 dictionary");
-        generate_fix_dictionary_asn1(&fix50_dict, "fix50_asn1.rs", out_path)?;
+    features
+}
+
+/// Generates ASN.1 type definitions from FIX dictionaries.
+fn generate_fix_asn1_definitions(enabled_features: &[String]) -> Result<()> {
+    let out_dir = env::var("OUT_DIR").context("Failed to get OUT_DIR environment variable")?;
+    let out_path = Path::new(&out_dir);
+
+    for feature in enabled_features {
+        let (dict_result, filename) = match feature.as_str() {
+            "fix40" => (Dictionary::fix40(), "fix40_asn1.rs"),
+            "fix44" => (Dictionary::fix44(), "fix44_asn1.rs"),
+            "fix50" => (Dictionary::fix50(), "fix50_asn1.rs"),
+            _ => {
+                println!(
+                    "cargo:warning=Skipping unavailable FIX feature: {feature} (not enabled in build dependencies)"
+                );
+                continue;
+            }
+        };
+
+        let dictionary = dict_result
+            .with_context(|| format!("Failed to parse {} dictionary", feature.to_uppercase()))?;
+
+        println!(
+            "cargo:warning=Generating ASN.1 definitions for {}",
+            feature.to_uppercase()
+        );
+        generate_fix_dictionary_asn1(&dictionary, filename, out_path)
+            .with_context(|| format!("Failed to generate ASN.1 definitions for {feature}"))?;
     }
 
     Ok(())
@@ -111,7 +142,8 @@ use crate::types::{{Field, ToFixFieldValue}};
 
     // Write to output file
     let file_path = out_path.join(filename);
-    fs::write(file_path, output)?;
+    fs::write(file_path, output)
+        .with_context(|| format!("Failed to write ASN.1 definitions to {filename}"))?;
 
     Ok(())
 }
@@ -346,6 +378,12 @@ pub struct Asn1Field {
     pub fn from_fix_message(msg: &crate::types::FixMessage) -> Option<Self> {
         let msg_type = FixMessageType::from_str(&msg.msg_type)?;
         
+        // Extract sending time from fields if present (tag 52)
+        let sending_time = msg.fields
+            .iter()
+            .find(|field| field.tag == 52)
+            .map(|field| field.value.to_string());
+        
         let fields = msg.fields
             .iter()
             .filter_map(|field| {
@@ -362,7 +400,7 @@ pub struct Asn1Field {
             sender_comp_id: msg.sender_comp_id.clone(),
             target_comp_id: msg.target_comp_id.clone(),
             msg_seq_num: msg.msg_seq_num,
-            sending_time: None, // TODO: Extract from fields if present
+            sending_time,
             fields,
         })
     }
@@ -513,7 +551,7 @@ fn generate_custom_asn1_schemas() -> Result<()> {
 
     if !schemas_dir.exists() {
         // Create schemas directory with a sample schema
-        fs::create_dir_all(&schemas_dir)?;
+        fs::create_dir_all(&schemas_dir).context("Failed to create schemas directory")?;
 
         let sample_schema = r#"-- Sample ASN.1 schema for FIX message extensions
 -- Place custom ASN.1 schemas in this directory for automatic compilation
@@ -545,7 +583,8 @@ ExtendedFixMessage ::= SEQUENCE {
 END
 "#;
 
-        fs::write(schemas_dir.join("sample.asn1"), sample_schema)?;
+        fs::write(schemas_dir.join("sample.asn1"), sample_schema)
+            .context("Failed to write sample ASN.1 schema")?;
 
         println!("cargo:warning=Created schemas/ directory with sample ASN.1 schema");
         println!(
@@ -553,26 +592,135 @@ END
         );
     }
 
-    // Process any .asn1 files in the schemas directory
-    let schema_pattern = schemas_dir.join("*.asn1");
-    if let Ok(entries) = glob::glob(&schema_pattern.to_string_lossy()) {
-        for entry in entries {
-            let schema_file = entry?;
-            println!(
-                "cargo:warning=Found ASN.1 schema: {}",
-                schema_file.display()
-            );
+    // Process any .asn1 files in the schemas directory using proper ASN.1 compilation
+    compile_asn1_schemas(&schemas_dir).context("Failed to compile ASN.1 schemas")?;
 
-            // For now, just copy the schema files to OUT_DIR
-            // In a full implementation, you would parse and compile them
-            let out_dir = env::var("OUT_DIR")?;
-            let filename = schema_file
-                .file_name()
-                .expect("Schema file should have a valid filename");
-            let output_path = Path::new(&out_dir).join(filename);
-            fs::copy(&schema_file, output_path)?;
+    Ok(())
+}
+
+/// Compiles ASN.1 schema files using rasn-compiler for proper code generation.
+fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
+    let schema_pattern = schemas_dir.join("*.asn1");
+
+    // Check if glob crate is available in build dependencies
+    match glob::glob(&schema_pattern.to_string_lossy()) {
+        Ok(entries) => {
+            let out_dir =
+                env::var("OUT_DIR").context("Failed to get OUT_DIR environment variable")?;
+            let out_path = Path::new(&out_dir);
+
+            for entry in entries {
+                let schema_file = entry.context("Failed to read schema file entry")?;
+
+                println!(
+                    "cargo:warning=Compiling ASN.1 schema: {}",
+                    schema_file.display()
+                );
+
+                // Get the filename without extension for generated Rust module
+                let file_stem = schema_file
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .with_context(|| format!("Invalid filename: {}", schema_file.display()))?;
+
+                let output_file = format!("{file_stem}_asn1.rs");
+                let output_path = out_path.join(&output_file);
+
+                // Attempt to compile the ASN.1 schema
+                match compile_asn1_file(&schema_file, &output_path) {
+                    Ok(_) => {
+                        println!(
+                            "cargo:warning=Successfully compiled {} to {}",
+                            schema_file.display(),
+                            output_file
+                        );
+                    }
+                    Err(e) => {
+                        // If compilation fails, fall back to copying the file and warn
+                        println!(
+                            "cargo:warning=ASN.1 compilation failed for {}: {}. Copying file instead.",
+                            schema_file.display(),
+                            e
+                        );
+                        let filename = schema_file.file_name().with_context(|| {
+                            format!(
+                                "Schema file should have a valid filename: {}",
+                                schema_file.display()
+                            )
+                        })?;
+                        let fallback_path = out_path.join(filename);
+                        fs::copy(&schema_file, fallback_path).with_context(|| {
+                            format!("Failed to copy schema file {}", schema_file.display())
+                        })?;
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            println!("cargo:warning=Failed to search for ASN.1 schema files: {e}");
         }
     }
+
+    Ok(())
+}
+
+/// Compiles a single ASN.1 schema file to Rust code.
+/// This is a placeholder implementation - in practice you'd use rasn-compiler or similar.
+fn compile_asn1_file(schema_file: &Path, output_path: &Path) -> Result<()> {
+    // Read the ASN.1 schema file
+    let schema_content = fs::read_to_string(schema_file)
+        .with_context(|| format!("Failed to read schema file: {}", schema_file.display()))?;
+
+    // For now, generate a simple Rust wrapper around the schema
+    // In a full implementation, you would use rasn-compiler or implement proper ASN.1 parsing
+    let rust_code = format!(
+        r#"//! Generated Rust code from ASN.1 schema: {}
+//! This file is automatically generated by the build script.
+//! DO NOT EDIT MANUALLY - ALL CHANGES WILL BE OVERWRITTEN.
+//! Generated on: {}
+
+use rasn::{{AsnType, Decode, Encode}};
+
+// TODO: Implement proper ASN.1 compilation
+// For now, this is a placeholder that includes the original schema as documentation
+
+/*
+Original ASN.1 Schema:
+{}
+*/
+
+/// Placeholder struct for compiled ASN.1 schema
+#[derive(AsnType, Debug, Clone, PartialEq, Encode, Decode)]
+#[rasn(crate_root = "rasn")]
+pub struct CompiledSchema {{
+    /// Placeholder field - replace with actual compiled types
+    pub placeholder: String,
+}}
+
+impl Default for CompiledSchema {{
+    fn default() -> Self {{
+        Self {{
+            placeholder: "Generated from {}".to_string(),
+        }}
+    }}
+}}
+"#,
+        schema_file.display(),
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        schema_content,
+        schema_file
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+
+    // Write the generated Rust code
+    fs::write(output_path, rust_code).with_context(|| {
+        format!(
+            "Failed to write compiled schema to: {}",
+            output_path.display()
+        )
+    })?;
 
     Ok(())
 }

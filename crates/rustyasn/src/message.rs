@@ -74,10 +74,12 @@ impl Message {
         );
 
         // Extract sending_time from fields (tag 52) if present
+        // Use as_bytes() to preserve exact format and prevent data loss
         if let Some(sending_time_field) = fix_msg.fields.iter().find(|f| f.tag == 52) {
-            let sending_time = sending_time_field.value.to_string();
-            message.sending_time = Some(sending_time.clone());
-            message.set_field(52, sending_time.as_bytes().to_vec());
+            let sending_time_bytes = sending_time_field.value.as_bytes();
+            let sending_time = String::from_utf8_lossy(&sending_time_bytes).to_string();
+            message.sending_time = Some(sending_time);
+            message.set_field(52, sending_time_bytes);
         }
 
         // Add additional fields
@@ -115,6 +117,7 @@ impl Message {
     }
 
     /// Converts to a simple `FixMessage`.
+    /// Uses string-based type inference for backward compatibility.
     pub fn to_fix_message(&self) -> FixMessage {
         let fields = self
             .field_order
@@ -140,6 +143,40 @@ impl Message {
             msg_seq_num: self.msg_seq_num,
             fields,
         }
+    }
+
+    /// Converts to a simple `FixMessage` using schema-based type conversion.
+    /// This is more efficient and accurate than string-based type inference.
+    pub fn to_fix_message_with_schema(
+        &self,
+        schema: &crate::schema::Schema,
+    ) -> crate::Result<FixMessage> {
+        let mut fields = Vec::with_capacity(self.field_order.len());
+
+        for &tag in &self.field_order {
+            // Skip standard header fields that are already in the struct
+            if matches!(tag, 35 | 49 | 56 | 34 | 52) {
+                continue;
+            }
+
+            if let Some(value) = self.fields.get(&tag) {
+                let field_value =
+                    crate::types::FixFieldValue::from_bytes_with_schema(value, tag as u16, schema)?;
+
+                fields.push(Field {
+                    tag,
+                    value: field_value,
+                });
+            }
+        }
+
+        Ok(FixMessage {
+            msg_type: self.msg_type.as_str().to_string(),
+            sender_comp_id: self.sender_comp_id.clone(),
+            target_comp_id: self.target_comp_id.clone(),
+            msg_seq_num: self.msg_seq_num,
+            fields,
+        })
     }
 
     /// Converts to ASN.1 `FixMessage`.
@@ -547,6 +584,141 @@ mod tests {
             .find(|f| f.tag == 54)
             .expect("Side field should exist in converted message");
         assert_eq!(side_field.value.to_string(), "1");
+    }
+
+    #[test]
+    fn test_conversion_to_fix_message_with_schema() {
+        let dict = std::sync::Arc::new(
+            rustyfix_dictionary::Dictionary::fix44()
+                .expect("Failed to load FIX 4.4 dictionary for test"),
+        );
+        let schema = crate::schema::Schema::new(dict);
+
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
+        let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
+
+        // Add fields with specific types that will be handled differently by schema
+        message.set_field(55, b"EUR/USD".to_vec()); // Symbol - String type
+        message.set_field(54, b"1".to_vec()); // Side - String/Char type  
+        message.set_field(38, b"1000".to_vec()); // OrderQty - Qty type (decimal)
+        message.set_field(44, b"1.2345".to_vec()); // Price - Price type (decimal)
+
+        let fix_msg = message
+            .to_fix_message_with_schema(&schema)
+            .expect("Schema-based conversion should succeed");
+
+        assert_eq!(fix_msg.msg_type, "D");
+        assert_eq!(fix_msg.sender_comp_id, "SENDER");
+        assert_eq!(fix_msg.target_comp_id, "TARGET");
+        assert_eq!(fix_msg.msg_seq_num, 123);
+        assert_eq!(fix_msg.fields.len(), 4);
+
+        // Verify that fields are converted according to their actual types
+        let symbol_field = fix_msg
+            .fields
+            .iter()
+            .find(|f| f.tag == 55)
+            .expect("Symbol field should exist");
+        assert_eq!(symbol_field.value.to_string(), "EUR/USD");
+
+        let price_field = fix_msg
+            .fields
+            .iter()
+            .find(|f| f.tag == 44)
+            .expect("Price field should exist");
+        // Price should be stored as Decimal type with proper precision
+        assert_eq!(price_field.value.to_string(), "1.2345");
+        assert!(matches!(
+            price_field.value,
+            crate::types::FixFieldValue::Decimal(_)
+        ));
+    }
+
+    #[test]
+    fn test_schema_vs_string_conversion_performance_comparison() {
+        use std::time::Instant;
+
+        let dict = std::sync::Arc::new(
+            rustyfix_dictionary::Dictionary::fix44()
+                .expect("Failed to load FIX 4.4 dictionary for test"),
+        );
+        let schema = crate::schema::Schema::new(dict);
+
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
+        let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
+
+        // Add known fields that exist in FIX 4.4 dictionary
+        let known_fields = vec![
+            (55, b"EUR/USD".as_slice()),  // Symbol
+            (54, b"1".as_slice()),        // Side
+            (38, b"1000".as_slice()),     // OrderQty
+            (44, b"1.2345".as_slice()),   // Price
+            (40, b"2".as_slice()),        // OrdType
+            (59, b"0".as_slice()),        // TimeInForce
+            (1, b"ACCOUNT1".as_slice()),  // Account
+            (11, b"ORDER123".as_slice()), // ClOrdID
+        ];
+
+        for (tag, value) in &known_fields {
+            message.set_field(*tag, value.to_vec());
+        }
+
+        // Test string-based conversion
+        let start = Instant::now();
+        let _fix_msg_string = message.to_fix_message();
+        let string_duration = start.elapsed();
+
+        // Test schema-based conversion
+        let start = Instant::now();
+        let _fix_msg_schema = message
+            .to_fix_message_with_schema(&schema)
+            .expect("Schema conversion should work");
+        let schema_duration = start.elapsed();
+
+        // This test documents the performance difference
+        // Schema-based conversion should be more efficient for typed fields
+        println!("String conversion: {string_duration:?}, Schema conversion: {schema_duration:?}");
+
+        // Both should produce valid results
+        assert!(_fix_msg_string.fields.len() == known_fields.len());
+        assert!(_fix_msg_schema.fields.len() == known_fields.len());
+
+        // Verify specific field types are preserved in schema conversion
+        let price_field = _fix_msg_schema
+            .fields
+            .iter()
+            .find(|f| f.tag == 44)
+            .expect("Price field should exist");
+        assert!(matches!(
+            price_field.value,
+            crate::types::FixFieldValue::Decimal(_)
+        ));
+    }
+
+    #[test]
+    fn test_schema_conversion_with_unknown_field() {
+        let dict = std::sync::Arc::new(
+            rustyfix_dictionary::Dictionary::fix44()
+                .expect("Failed to load FIX 4.4 dictionary for test"),
+        );
+        let schema = crate::schema::Schema::new(dict);
+
+        let msg_type =
+            FixMessageType::from_str("D").expect("Failed to parse valid message type 'D'");
+        let mut message = Message::new(msg_type, "SENDER".to_string(), "TARGET".to_string(), 123);
+
+        // Add a field with an unknown tag (very high number unlikely to be in dictionary)
+        message.set_field(9999, b"unknown_field".to_vec());
+
+        // Schema-based conversion should fail gracefully for unknown fields
+        let result = message.to_fix_message_with_schema(&schema);
+        assert!(result.is_err(), "Should fail for unknown field tags");
+
+        // String-based conversion should still work
+        let fix_msg = message.to_fix_message();
+        assert_eq!(fix_msg.fields.len(), 1);
     }
 
     #[test]
