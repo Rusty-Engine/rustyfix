@@ -789,11 +789,7 @@ fn compile_asn1_schemas(schemas_dir: &Path) -> Result<()> {
                 // targeted support for FIX protocol ASN.1 extensions
                 match compile_asn1_file(&schema_file, &output_path) {
                     Ok(_) => {
-                        println!(
-                            "cargo:warning=Successfully compiled {} to {}",
-                            schema_file.display(),
-                            output_file
-                        );
+                        // Successfully compiled - no warning needed
                     }
                     Err(e) => {
                         // If our custom parser fails, fall back to copying the file and warn

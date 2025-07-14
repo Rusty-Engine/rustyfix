@@ -8,12 +8,6 @@ use smartstring::{LazyCompact, SmartString};
 type FixString = SmartString<LazyCompact>;
 use std::sync::Arc;
 
-/// Fallback header field tags used when `StandardHeader` component is not found
-const FALLBACK_HEADER_TAGS: &[u32] = &[8, 9, 35, 34, 49, 56, 52, 43, 122, 212, 213, 347, 369, 627];
-
-/// Fallback trailer field tags used when `StandardTrailer` component is not found
-const FALLBACK_TRAILER_TAGS: &[u32] = &[10, 89, 93];
-
 /// Schema definition for ASN.1 encoding of FIX messages.
 #[derive(Clone)]
 pub struct Schema {
@@ -25,6 +19,12 @@ pub struct Schema {
 
     /// Field tag to type mappings
     field_types: FxHashMap<u16, FieldTypeInfo>,
+
+    /// Header field tags (configurable, derived from dictionary)
+    header_tags: SmallVec<[u32; 16]>,
+
+    /// Trailer field tags (configurable, derived from dictionary)
+    trailer_tags: SmallVec<[u32; 8]>,
 }
 
 /// Schema for a specific message type.
@@ -141,15 +141,56 @@ impl Schema {
             dictionary: dictionary.clone(),
             message_schemas: FxHashMap::default(),
             field_types: FxHashMap::default(),
+            header_tags: SmallVec::new(),
+            trailer_tags: SmallVec::new(),
         };
 
-        // Build field type mappings
-        schema.build_field_types();
+        // Initialize configurable field tags from dictionary
+        schema.initialize_field_tags();
 
-        // Build message schemas
+        // Build the schema
+        schema.build_field_types();
         schema.build_message_schemas();
 
         schema
+    }
+
+    /// Initializes header and trailer field tags from the dictionary.
+    fn initialize_field_tags(&mut self) {
+        // Try to extract header tags from StandardHeader component
+        if let Some(header_component) = self.dictionary.component_by_name("StandardHeader") {
+            for item in header_component.items() {
+                match item.kind() {
+                    rustyfix_dictionary::LayoutItemKind::Field(field) => {
+                        self.header_tags.push(field.tag().get());
+                    }
+                    _ => {} // Skip non-field items
+                }
+            }
+        }
+
+        // Fallback header tags if StandardHeader component not found
+        if self.header_tags.is_empty() {
+            self.header_tags
+                .extend_from_slice(&[8, 9, 35, 34, 49, 56, 52, 43, 122, 212, 213, 347, 369, 627]);
+        }
+
+        // Try to extract trailer tags from StandardTrailer component
+        if let Some(trailer_component) = self.dictionary.component_by_name("StandardTrailer") {
+            for item in trailer_component.items() {
+                match item.kind() {
+                    rustyfix_dictionary::LayoutItemKind::Field(field) => {
+                        self.trailer_tags.push(field.tag().get());
+                    }
+                    _ => {} // Skip non-field items
+                }
+            }
+        }
+
+        // Fallback trailer tags if StandardTrailer component not found
+        if self.trailer_tags.is_empty() {
+            self.trailer_tags.extend_from_slice(&[10, 89, 93]);
+        }
     }
 
     /// Returns a reference to the underlying FIX dictionary.
@@ -224,7 +265,7 @@ impl Schema {
                 std_header.contains_field(field)
             } else {
                 // Fallback to known header field tags if component not found
-                FALLBACK_HEADER_TAGS.contains(&field.tag().get())
+                self.header_tags.contains(&field.tag().get())
             };
 
         // Check if field is in StandardTrailer component
@@ -233,7 +274,7 @@ impl Schema {
                 std_trailer.contains_field(field)
             } else {
                 // Fallback to known trailer field tags if component not found
-                FALLBACK_TRAILER_TAGS.contains(&field.tag().get())
+                self.trailer_tags.contains(&field.tag().get())
             };
 
         (in_header, in_trailer)

@@ -32,41 +32,13 @@ pub const BOOLEAN_SIZE: usize = 1;
 /// ASN.1 TLV (Tag-Length-Value) encoding overhead per field
 pub const FIELD_TLV_OVERHEAD: usize = 5;
 
-/// Common fields that appear in many message types (ordered by frequency)
-/// This significantly improves performance for typical messages
-const COMMON_FIELD_TAGS: &[u32] = &[
-    // Market data fields
-    55, // Symbol
-    54, // Side
-    38, // OrderQty
-    44, // Price
-    40, // OrdType
-    59, // TimeInForce
-    // Order/execution fields
-    11,  // ClOrdID
-    37,  // OrderID
-    17,  // ExecID
-    150, // ExecType
-    39,  // OrdStatus
-    // Additional common fields
-    1,   // Account
-    6,   // AvgPx
-    14,  // CumQty
-    32,  // LastQty
-    31,  // LastPx
-    151, // LeavesQty
-    60,  // TransactTime
-    109, // ClientID
-    // Reference fields
-    58,  // Text
-    354, // EncodedTextLen
-    355, // EncodedText
-];
-
-/// ASN.1 encoder for FIX messages.
+/// Encoder for ASN.1 encoded FIX messages.
 pub struct Encoder {
     config: Config,
     schema: Arc<Schema>,
+    /// Common fields that appear in many message types (configurable, ordered by frequency)
+    /// This significantly improves performance for typical messages
+    common_field_tags: SmallVec<[u32; 32]>,
 }
 
 /// Handle for encoding a single message.
@@ -92,7 +64,68 @@ impl Encoder {
     pub fn new(config: Config, dictionary: Arc<Dictionary>) -> Self {
         let schema = Arc::new(Schema::new(dictionary));
 
-        Self { config, schema }
+        let mut encoder = Self {
+            config,
+            schema,
+            common_field_tags: SmallVec::new(),
+        };
+
+        // Initialize common field tags with default high-frequency fields
+        encoder.initialize_common_field_tags();
+
+        encoder
+    }
+
+    /// Initializes common field tags with default high-frequency fields.
+    /// These can be updated based on actual usage statistics in production.
+    fn initialize_common_field_tags(&mut self) {
+        // Default common fields ordered by typical frequency in trading systems
+        let default_common_tags = &[
+            // Market data fields
+            55, // Symbol
+            54, // Side
+            38, // OrderQty
+            44, // Price
+            40, // OrdType
+            59, // TimeInForce
+            // Order/execution fields
+            11,  // ClOrdID
+            37,  // OrderID
+            17,  // ExecID
+            150, // ExecType
+            39,  // OrdStatus
+            // Additional common fields
+            1,   // Account
+            6,   // AvgPx
+            14,  // CumQty
+            32,  // LastQty
+            31,  // LastPx
+            151, // LeavesQty
+            60,  // TransactTime
+            109, // ClientID
+            // Reference fields
+            58,  // Text
+            354, // EncodedTextLen
+            355, // EncodedText
+        ];
+
+        self.common_field_tags
+            .extend_from_slice(default_common_tags);
+    }
+
+    /// Updates common field tags based on usage statistics.
+    /// This method allows runtime optimization based on actual message patterns.
+    pub fn update_common_field_tags(&mut self, field_usage_stats: &[(u32, usize)]) {
+        self.common_field_tags.clear();
+
+        // Sort by usage frequency (descending) and take the most common ones
+        let mut sorted_stats = field_usage_stats.to_vec();
+        sorted_stats.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Take up to 32 most common fields
+        for (tag, _count) in sorted_stats.iter().take(32) {
+            self.common_field_tags.push(*tag);
+        }
     }
 
     /// Starts encoding a new message.
@@ -200,7 +233,7 @@ impl Encoder {
         let mut processed_tags = FxHashSet::default();
 
         // First pass: Check common fields (O(1) for each)
-        for &tag in COMMON_FIELD_TAGS {
+        for &tag in &self.common_field_tags {
             if Self::is_standard_header_field(tag) {
                 continue;
             }

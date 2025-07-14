@@ -383,19 +383,37 @@ impl DecoderStreaming {
     }
 
     /// Checks if a byte is a plausible start tag for ASN.1 data.
-    /// This is a permissive check that accepts all potentially valid ASN.1 tags.
-    fn is_plausible_start_tag(_tag: u8) -> bool {
-        // Accept a broader range of ASN.1 tags
-        // Universal class tags (0x00-0x1F) are all valid
-        // Application class (0x40-0x7F) are valid
-        // Context-specific (0x80-0xBF) are valid
-        // Private class (0xC0-0xFF) are valid
-        // The tag format is: [Class(2 bits)][P/C(1 bit)][Tag number(5 bits)]
-        // For now, accept any tag that follows basic ASN.1 structure
-        // Bit 6 clear = Universal/Application class
-        // Bit 6 set = Context/Private class
-        // This is a much more permissive check that accepts all valid ASN.1 tags
-        true // All bytes can potentially be valid ASN.1 tags
+    /// This validates ASN.1 tag structure and filters out reserved values.
+    fn is_plausible_start_tag(tag: u8) -> bool {
+        // A minimal check to filter out obviously invalid tags.
+        // According to ASN.1 standards, a tag value of 0 is reserved and should not be used.
+        if tag == 0x00 {
+            return false;
+        }
+
+        // Validate ASN.1 tags based on their structure and class
+        // Universal class tags (0x00-0x1F) - exclude 0x00 which is reserved
+        if (0x01..=0x1F).contains(&tag) {
+            return true;
+        }
+
+        // Application class tags (0x40-0x7F)
+        if (0x40..=0x7F).contains(&tag) {
+            return true;
+        }
+
+        // Context-specific class tags (0x80-0xBF)
+        if (0x80..=0xBF).contains(&tag) {
+            return true;
+        }
+
+        // Private class tags (0xC0-0xFF)
+        if tag >= 0xC0 {
+            return true;
+        }
+
+        // Tags 0x20-0x3F are reserved for future use
+        false
     }
 
     /// Decodes ASN.1 length at the given offset.

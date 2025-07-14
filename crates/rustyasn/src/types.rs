@@ -139,8 +139,7 @@ impl FixFieldValue {
         } else {
             // For non-negative numbers, try unsigned first to prefer the more specific type
             if let Ok(u) = s.parse::<u64>() {
-                // Use unsigned type for values parsed as u64 to maintain semantic meaning
-                // Always use unsigned type to preserve semantic meaning
+                // Use unsigned types (e.g., u64) to maintain semantic meaning and specificity for non-negative values
                 return FixFieldValue::UnsignedInteger(u);
             }
         }

@@ -180,15 +180,13 @@ pub fn schema_span(operation: &str) -> Span {
 /// Measures encoding performance metrics.
 pub struct EncodingMetrics {
     start: Instant,
-    #[allow(dead_code)]
     encoding_rule: &'static str,
-    #[allow(dead_code)]
     message_type: String,
     field_count: usize,
 }
 
 impl EncodingMetrics {
-    /// Creates new encoding metrics.
+    /// Creates a new encoding metrics tracker.
     pub fn new(encoding_rule: &'static str, message_type: String) -> Self {
         Self {
             start: Instant::now(),
@@ -198,31 +196,53 @@ impl EncodingMetrics {
         }
     }
 
-    /// Records a field being encoded.
+    /// Records that a field has been encoded.
     pub fn record_field(&mut self) {
         self.field_count += 1;
     }
 
-    /// Completes the metrics and records them.
-    pub fn complete(self, _encoded_size: usize) {
-        let _duration = self.start.elapsed();
+    /// Completes the encoding metrics and logs the results.
+    pub fn complete(self, encoded_size: usize) {
+        let duration = self.start.elapsed();
 
-        let _span = LocalSpan::enter_with_local_parent("encoding_complete");
-        // TODO: Add proper metrics when fastrace API is stable
+        // TODO: Implement proper metrics collection
+        // For now, we use basic logging. In production, this would integrate with
+        // a metrics system like Prometheus or send to a telemetry service.
+        log::debug!(
+            "ASN.1 encoding completed: rule={}, type={}, fields={}, size={}, duration={:?}",
+            self.encoding_rule,
+            self.message_type,
+            self.field_count,
+            encoded_size,
+            duration
+        );
+    }
+
+    /// Gets the encoding rule being used.
+    pub fn encoding_rule(&self) -> &'static str {
+        self.encoding_rule
+    }
+
+    /// Gets the message type being encoded.
+    pub fn message_type(&self) -> &str {
+        &self.message_type
+    }
+
+    /// Gets the current field count.
+    pub fn field_count(&self) -> usize {
+        self.field_count
     }
 }
 
 /// Measures decoding performance metrics.
 pub struct DecodingMetrics {
     start: Instant,
-    #[allow(dead_code)]
     encoding_rule: &'static str,
-    #[allow(dead_code)]
     input_size: usize,
 }
 
 impl DecodingMetrics {
-    /// Creates new decoding metrics.
+    /// Creates a new decoding metrics tracker.
     pub fn new(encoding_rule: &'static str, input_size: usize) -> Self {
         Self {
             start: Instant::now(),
@@ -231,12 +251,31 @@ impl DecodingMetrics {
         }
     }
 
-    /// Completes the metrics and records them.
-    pub fn complete(self, _message_type: &str, _field_count: usize) {
-        let _duration = self.start.elapsed();
+    /// Completes the decoding metrics and logs the results.
+    pub fn complete(self, message_type: &str, field_count: usize) {
+        let duration = self.start.elapsed();
 
-        let _span = LocalSpan::enter_with_local_parent("decoding_complete");
-        // TODO: Add proper metrics when fastrace API is stable
+        // TODO: Implement proper metrics collection
+        // For now, we use basic logging. In production, this would integrate with
+        // a metrics system like Prometheus or send to a telemetry service.
+        log::debug!(
+            "ASN.1 decoding completed: rule={}, type={}, fields={}, input_size={}, duration={:?}",
+            self.encoding_rule,
+            message_type,
+            field_count,
+            self.input_size,
+            duration
+        );
+    }
+
+    /// Gets the encoding rule being used.
+    pub fn encoding_rule(&self) -> &'static str {
+        self.encoding_rule
+    }
+
+    /// Gets the input size being decoded.
+    pub fn input_size(&self) -> usize {
+        self.input_size
     }
 }
 

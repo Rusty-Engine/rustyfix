@@ -14,6 +14,8 @@ keywords = ["fix", "asn1", "ber", "der", "oer"]
 workspace = true
 
 [dependencies]
+serde = { workspace = true, optional = true }
+simd-json = { workspace = true }
 # Core dependencies
 rustyfix = { path = "../rustyfix", version = "0.7.4", features = ["fix50"] }
 rustyfix-dictionary = { path = "../rustyfix-dictionary", version = "0.7.4" }
@@ -35,8 +37,8 @@ parking_lot = { workspace = true }
 zerocopy = { workspace = true }
 
 # Optional dependencies
-serde = { workspace = true, optional = true }
 fastrace = { workspace = true, optional = true }
+log = { workspace = true }
 
 [dev-dependencies]
 # Testing
@@ -59,7 +61,10 @@ fix50 = ["rustyfix-dictionary/fix50"]
 [build-dependencies]
 # For code generation from ASN.1 schemas and FIX dictionaries
 rustyfix-codegen = { path = "../rustyfix-codegen", version = "0.7.4" }
-rustyfix-dictionary = { path = "../rustyfix-dictionary", version = "0.7.4", features = ["fix40", "fix50"] }
+rustyfix-dictionary = { path = "../rustyfix-dictionary", version = "0.7.4", features = [
+    "fix40",
+    "fix50",
+] }
 
 # Build script utilities
 anyhow = "1.0"
@@ -70,4 +75,3 @@ chrono = { workspace = true }
 [[bench]]
 name = "asn1_encodings"
 harness = false
-
