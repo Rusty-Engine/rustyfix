@@ -83,45 +83,45 @@ mod integration_tests {
         // Write test data
         encoder
             .write_u64(0, 1234567890)
-            .map_err(|e| format!("Failed to write u64: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         encoder
             .write_u32(8, 42)
-            .map_err(|e| format!("Failed to write u32: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         encoder
             .write_string(12, 16, "TEST_STRING")
-            .map_err(|e| format!("Failed to write string: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         encoder
             .write_f32(28, std::f32::consts::PI)
-            .map_err(|e| format!("Failed to write f32: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         let message = encoder
             .finalize()
-            .map_err(|e| format!("Failed to finalize encoder: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         // Decode and verify
         let decoder =
-            SbeDecoder::new(&message).map_err(|e| format!("Failed to create decoder: {e}"))?;
+            SbeDecoder::new(&message).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert_eq!(decoder.template_id(), 1);
         assert_eq!(decoder.schema_version(), 0);
 
         let read_u64 = decoder
             .read_u64(0)
-            .map_err(|e| format!("Failed to read u64: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert_eq!(read_u64, 1234567890);
 
         let read_u32 = decoder
             .read_u32(8)
-            .map_err(|e| format!("Failed to read u32: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert_eq!(read_u32, 42);
 
         let read_string = decoder
             .read_string(12, 16)
-            .map_err(|e| format!("Failed to read string: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert_eq!(read_string.trim_end_matches('\0'), "TEST_STRING");
 
         let read_f32 = decoder
             .read_f32(28)
-            .map_err(|e| format!("Failed to read f32: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert!((read_f32 - std::f32::consts::PI).abs() < 0.001);
 
         Ok(())
@@ -134,29 +134,29 @@ mod integration_tests {
         // Fixed field
         encoder
             .write_u64(0, 999)
-            .map_err(|e| format!("Failed to write u64: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         // Variable data
         encoder
             .write_variable_string("Hello")
-            .map_err(|e| format!("Failed to write variable string: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         encoder
             .write_variable_string("World")
-            .map_err(|e| format!("Failed to write variable string: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         encoder
             .write_variable_bytes(b"Binary data")
-            .map_err(|e| format!("Failed to write variable bytes: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         let message = encoder
             .finalize()
-            .map_err(|e| format!("Failed to finalize encoder: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         // Verify fixed field
         let decoder =
-            SbeDecoder::new(&message).map_err(|e| format!("Failed to create decoder: {e}"))?;
+            SbeDecoder::new(&message).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         let read_u64 = decoder
             .read_u64(0)
-            .map_err(|e| format!("Failed to read u64: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert_eq!(read_u64, 999);
 
         // Variable data would be processed by generated code
@@ -169,21 +169,21 @@ mod integration_tests {
         let mut encoder = SbeEncoder::new(123, 5, 16);
         encoder
             .write_u64(0, 42)
-            .map_err(|e| format!("Failed to write u64: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         encoder
             .write_u64(8, 84)
-            .map_err(|e| format!("Failed to write u64: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         let message = encoder
             .finalize()
-            .map_err(|e| format!("Failed to finalize encoder: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         // Test header extraction
         let template_id = SbeMessageHeader::extract_template_id(&message)
-            .map_err(|e| format!("Failed to extract template_id: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         let schema_version = SbeMessageHeader::extract_schema_version(&message)
-            .map_err(|e| format!("Failed to extract schema_version: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         let length = SbeMessageHeader::extract_message_length(&message)
-            .map_err(|e| format!("Failed to extract message_length: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
         assert_eq!(template_id, 123);
         assert_eq!(schema_version, 5);
@@ -191,7 +191,7 @@ mod integration_tests {
 
         // Test validation
         let (len, tid, sv) = SbeMessageHeader::validate_basic(&message)
-            .map_err(|e| format!("Failed to validate basic: {e}"))?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         assert_eq!(len, message.len() as u32);
         assert_eq!(tid, 123);
         assert_eq!(sv, 5);

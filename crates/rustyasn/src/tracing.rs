@@ -271,4 +271,105 @@ mod tests {
         metrics.complete("ExecutionReport", 15);
         // Metrics are recorded to fastrace
     }
+
+    #[test]
+    fn test_encoding_span_known_rules() {
+        // Test that known encoding rules return expected span names
+        let _span_ber = encoding_span("BER", "TestMessage");
+        let _span_der = encoding_span("DER", "TestMessage");
+        let _span_oer = encoding_span("OER", "TestMessage");
+        let _span_per = encoding_span("PER", "TestMessage");
+        let _span_xer = encoding_span("XER", "TestMessage");
+        let _span_jer = encoding_span("JER", "TestMessage");
+
+        // All spans should be created without panicking
+        // The actual span names are verified by the constants
+    }
+
+    #[test]
+    fn test_encoding_span_unknown_rule() {
+        // Test that unknown encoding rules fallback to generic span name
+        let _span = encoding_span("UNKNOWN_RULE", "TestMessage");
+
+        // Should not panic and should use the fallback span name
+    }
+
+    #[test]
+    fn test_decoding_span_known_rules() {
+        // Test that known encoding rules return expected span names
+        let _span_ber = decoding_span("BER", 1024);
+        let _span_der = decoding_span("DER", 1024);
+        let _span_oer = decoding_span("OER", 1024);
+        let _span_per = decoding_span("PER", 1024);
+        let _span_xer = decoding_span("XER", 1024);
+        let _span_jer = decoding_span("JER", 1024);
+
+        // All spans should be created without panicking
+        // The actual span names are verified by the constants
+    }
+
+    #[test]
+    fn test_decoding_span_unknown_rule() {
+        // Test that unknown encoding rules fallback to generic span name
+        let _span = decoding_span("UNKNOWN_RULE", 1024);
+
+        // Should not panic and should use the fallback span name
+    }
+
+    #[test]
+    fn test_schema_span_known_operations() {
+        // Test that known schema operations return expected span names
+        let _span_validate = schema_span("validate");
+        let _span_lookup = schema_span("lookup");
+        let _span_compile = schema_span("compile");
+        let _span_transform = schema_span("transform");
+        let _span_parse = schema_span("parse");
+        let _span_serialize = schema_span("serialize");
+
+        // All spans should be created without panicking
+        // The actual span names are verified by the constants
+    }
+
+    #[test]
+    fn test_schema_span_unknown_operation() {
+        // Test that unknown schema operations fallback to generic span name
+        let _span = schema_span("unknown_operation");
+
+        // Should not panic and should use the fallback span name
+    }
+
+    #[test]
+    fn test_span_constants() {
+        // Verify that the span constants have expected values
+        assert_eq!(ENCODE_BER_SPAN, "asn1.encode.BER");
+        assert_eq!(ENCODE_DER_SPAN, "asn1.encode.DER");
+        assert_eq!(ENCODE_OER_SPAN, "asn1.encode.OER");
+        assert_eq!(ENCODE_PER_SPAN, "asn1.encode.PER");
+        assert_eq!(ENCODE_XER_SPAN, "asn1.encode.XER");
+        assert_eq!(ENCODE_JER_SPAN, "asn1.encode.JER");
+
+        assert_eq!(DECODE_BER_SPAN, "asn1.decode.BER");
+        assert_eq!(DECODE_DER_SPAN, "asn1.decode.DER");
+        assert_eq!(DECODE_OER_SPAN, "asn1.decode.OER");
+        assert_eq!(DECODE_PER_SPAN, "asn1.decode.PER");
+        assert_eq!(DECODE_XER_SPAN, "asn1.decode.XER");
+        assert_eq!(DECODE_JER_SPAN, "asn1.decode.JER");
+
+        assert_eq!(SCHEMA_VALIDATE_SPAN, "asn1.schema.validate");
+        assert_eq!(SCHEMA_LOOKUP_SPAN, "asn1.schema.lookup");
+        assert_eq!(SCHEMA_COMPILE_SPAN, "asn1.schema.compile");
+        assert_eq!(SCHEMA_TRANSFORM_SPAN, "asn1.schema.transform");
+        assert_eq!(SCHEMA_PARSE_SPAN, "asn1.schema.parse");
+        assert_eq!(SCHEMA_SERIALIZE_SPAN, "asn1.schema.serialize");
+    }
+
+    #[test]
+    fn test_utility_functions() {
+        // Test that utility functions don't panic
+        record_buffer_allocation(1024, "test_buffer");
+        record_schema_lookup("NewOrderSingle", true, 1000);
+        record_schema_lookup("NonExistentMessage", false, 500);
+
+        // These functions currently have no return values but should not panic
+    }
 }

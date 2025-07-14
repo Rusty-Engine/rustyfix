@@ -456,7 +456,7 @@ impl ToFixFieldValue for FixFieldTag {{
     Ok(output)
 }
 
-/// Generates ASN.1 message structures for different FIX message types.
+/// Generates a generic ASN.1 message structure for FIX messages.
 fn generate_message_structures(_dictionary: &Dictionary) -> Result<String> {
     let mut output = String::new();
 

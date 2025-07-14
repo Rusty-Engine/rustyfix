@@ -64,106 +64,62 @@ fn basic_example() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_basic_example() {
-        basic_example().expect("Basic example should work");
-    }
-}
 ```
+
+**Run the example**: `cargo run --example basic_usage`
 
 ### Streaming Decoder
 
+For processing multiple messages from a continuous stream:
+
 ```rust
-use rustyasn::{Config, Encoder, DecoderStreaming, EncodingRule};
+use rustyasn::{Config, DecoderStreaming, EncodingRule};
 use rustyfix_dictionary::Dictionary;
 use std::sync::Arc;
 
 fn streaming_example() -> Result<(), Box<dyn std::error::Error>> {
-    // Setup
     let dict = Arc::new(Dictionary::fix44()?);
     let config = Config::new(EncodingRule::DER);
-    
-    // Create some test messages first using the encoder
-    let encoder = Encoder::new(config.clone(), dict.clone());
-    let mut test_messages = Vec::new();
-    
-    for seq_num in 1..=3 {
-        let mut handle = encoder.start_message("0", "SENDER", "TARGET", seq_num);
-        handle.add_string(112, format!("TestID_{}", seq_num)); // TestReqID
-        let encoded = handle.encode()?;
-        test_messages.extend_from_slice(&encoded);
-    }
-    
-    // Now demonstrate streaming decoding
     let mut decoder = DecoderStreaming::new(config, dict);
 
     // Simulate feeding data in chunks (as would happen from network/file)
-    let chunk_size = test_messages.len() / 3; // Split into 3 chunks
-    for chunk in test_messages.chunks(chunk_size) {
-        decoder.feed(chunk);
-        
-        // Process any complete messages that have been decoded
-        while let Ok(Some(message)) = decoder.decode_next() {
-            println!("Received: {} from {} (seq: {})", 
-                message.msg_type(), 
-                message.sender_comp_id(),
-                message.msg_seq_num()
-            );
-        }
+    let data_chunk = vec![/* your message data */];
+    decoder.feed(&data_chunk);
+    
+    // Process any complete messages that have been decoded
+    while let Ok(Some(message)) = decoder.decode_next() {
+        println!("Received: {} from {} (seq: {})", 
+            message.msg_type(), 
+            message.sender_comp_id(),
+            message.msg_seq_num()
+        );
     }
     
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_streaming_example() {
-        streaming_example().expect("Streaming example should work");
-    }
-}
 ```
+
+**Run the example**: `cargo run --example streaming_decoder`
 
 ### Configuration Profiles
 
 ```rust
 use rustyasn::{Config, EncodingRule};
 
-fn configuration_examples() {
-    // Optimized for low-latency trading
-    let low_latency_config = Config::low_latency();  // Uses OER, skips validation
-    println!("Low latency rule: {:?}", low_latency_config.encoding_rule);
-    
-    // Optimized for reliability and compliance
-    let high_reliability_config = Config::high_reliability();  // Uses DER, full validation
-    println!("High reliability rule: {:?}", high_reliability_config.encoding_rule);
-    
-    // Custom configuration
-    let mut custom_config = Config::new(EncodingRule::OER);
-    custom_config.max_message_size = 16 * 1024;  // 16KB limit
-    custom_config.enable_zero_copy = true;
-    custom_config.validate_checksums = false;    // Disable for performance
-    
-    println!("Custom config max size: {} bytes", custom_config.max_message_size);
-}
+// Optimized for low-latency trading
+let low_latency_config = Config::low_latency();  // Uses OER, skips validation
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Optimized for reliability and compliance
+let high_reliability_config = Config::high_reliability();  // Uses DER, full validation
 
-    #[test]
-    fn test_configuration_examples() {
-        configuration_examples(); // Should run without panicking
-    }
-}
+// Custom configuration
+let mut custom_config = Config::new(EncodingRule::OER);
+custom_config.max_message_size = 16 * 1024;  // 16KB limit
+custom_config.enable_zero_copy = true;
+custom_config.validate_checksums = false;    // Disable for performance
 ```
+
+**Run the example**: `cargo run --example configuration`
 
 ## Performance Considerations
 
@@ -185,39 +141,16 @@ RustyASN integrates with Simple Open Framing Header (SOFH) for message framing:
 ```rust
 use rustyasn::EncodingRule;
 
-// SOFH encoding type enum for demonstration (would come from rustysofh crate)
-#[derive(Debug)]
-enum EncodingType {
-    Asn1BER,
-    Asn1OER,
-}
-
-fn sofh_integration_example(rule: EncodingRule) -> EncodingType {
-    // SOFH encoding types for ASN.1
+// Map ASN.1 encoding rules to SOFH encoding types
+fn map_asn1_to_sofh(rule: EncodingRule) -> EncodingType {
     match rule {
         EncodingRule::BER | EncodingRule::DER => EncodingType::Asn1BER,
         EncodingRule::OER => EncodingType::Asn1OER,
     }
 }
-
-fn main() {
-    let ber_encoding = sofh_integration_example(EncodingRule::BER);
-    let oer_encoding = sofh_integration_example(EncodingRule::OER);
-    
-    println!("BER/DER uses: {:?}", ber_encoding);
-    println!("OER uses: {:?}", oer_encoding);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_sofh_integration() {
-        main(); // Should run without panicking
-    }
-}
 ```
+
+**Run the example**: `cargo run --example sofh_integration`
 
 ## Safety and Security
 

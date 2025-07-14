@@ -26,6 +26,14 @@ pub enum Asn1FieldError {
     /// Invalid boolean value.
     #[error("Invalid boolean value")]
     InvalidBool,
+    /// Repeating group parsing is not yet supported.
+    #[error("Repeating group parsing is not yet supported. Group field tag: {tag}, count: {count}")]
+    GroupParsingUnsupported {
+        /// The field tag for the group count field
+        tag: u32,
+        /// The number of group entries that were expected
+        count: usize,
+    },
 }
 
 /// ASN.1 wrapper for UTF-8 strings.

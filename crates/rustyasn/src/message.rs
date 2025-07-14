@@ -229,16 +229,19 @@ impl Message {
     /// Parses repeating group entries from the message fields.
     fn parse_group_entries(
         &self,
-        _count_tag: u32,
-        _count: usize,
-    ) -> Result<Vec<Message>, Box<dyn std::error::Error + Send + Sync>> {
+        count_tag: u32,
+        count: usize,
+    ) -> Result<Vec<Message>, Asn1FieldError> {
         // TODO: Implement proper repeating group parsing
         // This requires:
         // 1. Look up the group schema from a dictionary/schema
         // 2. Parse the fields in order based on the group definition
         // 3. Create proper Message instances for each group entry
 
-        Err("Repeating group parsing is not yet implemented. This is a placeholder that needs proper implementation.".into())
+        Err(Asn1FieldError::GroupParsingUnsupported {
+            tag: count_tag,
+            count,
+        })
     }
 }
 
@@ -278,6 +281,23 @@ impl FieldMap<u32> for Message {
         }
     }
 
+    /// Retrieves a repeating group from the message.
+    ///
+    /// # Note
+    ///
+    /// **Repeating groups are not yet supported** in the ASN.1 implementation.
+    /// This method will currently return an error for any group field.
+    /// Group parsing requires proper schema definition and field ordering
+    /// logic that is not yet implemented.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The field tag for the group count field
+    ///
+    /// # Returns
+    ///
+    /// Returns a `FieldValueError` with `GroupParsingUnsupported` error until
+    /// group parsing is fully implemented.
     fn group(
         &self,
         field: u32,
@@ -288,11 +308,35 @@ impl FieldMap<u32> for Message {
         // Parse the group entries
         let entries = self
             .parse_group_entries(field, count)
-            .map_err(|_| FieldValueError::Invalid(rustyfix::field_types::InvalidInt))?;
+            .map_err(|_group_error| {
+                // Log the specific group parsing error for debugging
+                // TODO: Add proper logging when fastrace logging API is stable
+
+                // Map to the required error type for the trait
+                FieldValueError::Invalid(rustyfix::field_types::InvalidInt)
+            })?;
 
         Ok(MessageGroup::new(entries))
     }
 
+    /// Retrieves an optional repeating group from the message.
+    ///
+    /// # Note
+    ///
+    /// **Repeating groups are not yet supported** in the ASN.1 implementation.
+    /// This method will currently return an error for any existing group field.
+    /// Group parsing requires proper schema definition and field ordering
+    /// logic that is not yet implemented.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The field tag for the group count field
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(None)` if the field doesn't exist, or returns a
+    /// `GroupParsingUnsupported` error if the field exists but group parsing
+    /// is not yet implemented.
     fn group_opt(&self, field: u32) -> Result<Option<Self::Group>, <usize as FieldType>::Error> {
         // Check if the count field exists
         match self.get_opt::<usize>(field) {
@@ -300,7 +344,13 @@ impl FieldMap<u32> for Message {
                 // Parse the group entries
                 let entries = self
                     .parse_group_entries(field, count)
-                    .map_err(|_| rustyfix::field_types::InvalidInt)?;
+                    .map_err(|_group_error| {
+                        // Log the specific group parsing error for debugging
+                        // TODO: Add proper logging when fastrace logging API is stable
+
+                        // Map to the required error type for the trait
+                        rustyfix::field_types::InvalidInt
+                    })?;
                 Ok(Some(MessageGroup::new(entries)))
             }
             Ok(None) => Ok(None),

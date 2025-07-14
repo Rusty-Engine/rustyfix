@@ -8,6 +8,12 @@ use smartstring::{LazyCompact, SmartString};
 type FixString = SmartString<LazyCompact>;
 use std::sync::Arc;
 
+/// Fallback header field tags used when `StandardHeader` component is not found
+const FALLBACK_HEADER_TAGS: &[u32] = &[8, 9, 35, 34, 49, 56, 52, 43, 122, 212, 213, 347, 369, 627];
+
+/// Fallback trailer field tags used when `StandardTrailer` component is not found
+const FALLBACK_TRAILER_TAGS: &[u32] = &[10, 89, 93];
+
 /// Schema definition for ASN.1 encoding of FIX messages.
 #[derive(Clone)]
 pub struct Schema {
@@ -218,10 +224,7 @@ impl Schema {
                 std_header.contains_field(field)
             } else {
                 // Fallback to known header field tags if component not found
-                matches!(
-                    field.tag().get(),
-                    8 | 9 | 35 | 34 | 49 | 56 | 52 | 43 | 122 | 212 | 213 | 347 | 369 | 627
-                )
+                FALLBACK_HEADER_TAGS.contains(&field.tag().get())
             };
 
         // Check if field is in StandardTrailer component
@@ -230,7 +233,7 @@ impl Schema {
                 std_trailer.contains_field(field)
             } else {
                 // Fallback to known trailer field tags if component not found
-                matches!(field.tag().get(), 10 | 89 | 93)
+                FALLBACK_TRAILER_TAGS.contains(&field.tag().get())
             };
 
         (in_header, in_trailer)
@@ -491,25 +494,8 @@ impl Schema {
     /// Validates UTC timestamp format (YYYYMMDD-HH:MM:SS or YYYYMMDD-HH:MM:SS.sss)
     /// Supports variable fractional seconds (1-6 digits after decimal point)
     fn is_valid_utc_timestamp(s: &str) -> bool {
-        // Find the date-time separator
-        if let Some(separator_pos) = s.find('-') {
-            // Ensure we have at least 8 characters for date part
-            if separator_pos != 8 {
-                return false;
-            }
-
-            let (date_str, time_str) = s.split_at(separator_pos);
-
-            // Check date part (first 8 chars)
-            if !Self::is_valid_utc_date(date_str) {
-                return false;
-            }
-
-            // Check time part (after the '-')
-            Self::is_valid_utc_time(&time_str[1..])
-        } else {
-            false
-        }
+        // Use chrono's NaiveDateTime parser with %.f format for fractional seconds
+        chrono::NaiveDateTime::parse_from_str(s, "%Y%m%d-%H:%M:%S%.f").is_ok()
     }
 
     /// Validates UTC date format (YYYYMMDD)
