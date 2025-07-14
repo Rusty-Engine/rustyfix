@@ -100,23 +100,14 @@ impl DecodedMessage {
         match self.fields.get(&tag) {
             Some(crate::types::FixFieldValue::Integer(i)) => Ok(Some(*i)),
             Some(crate::types::FixFieldValue::UnsignedInteger(u)) => Ok(Some(*u as i64)),
-            Some(_) => {
-                // Try to parse the string representation
-                self.get_field(tag)
-                    .ok_or_else(|| {
-                        Error::Decode(DecodeError::ConstraintViolation {
-                            field: format!("Tag {tag}").into(),
-                            reason: "Field not found".into(),
-                        })
-                    })?
-                    .parse()
-                    .map(Some)
-                    .map_err(|_| {
-                        Error::Decode(DecodeError::ConstraintViolation {
-                            field: format!("Tag {tag}").into(),
-                            reason: "Invalid integer format".into(),
-                        })
+            Some(field_value) => {
+                // Try to parse the string representation of the field value
+                field_value.to_string().parse().map(Some).map_err(|_| {
+                    Error::Decode(DecodeError::ConstraintViolation {
+                        field: format!("Tag {tag}").into(),
+                        reason: "Invalid integer format".into(),
                     })
+                })
             }
             None => Ok(None),
         }
@@ -136,23 +127,14 @@ impl DecodedMessage {
                     }))
                 }
             }
-            Some(_) => {
-                // Try to parse the string representation
-                self.get_field(tag)
-                    .ok_or_else(|| {
-                        Error::Decode(DecodeError::ConstraintViolation {
-                            field: format!("Tag {tag}").into(),
-                            reason: "Field not found".into(),
-                        })
-                    })?
-                    .parse()
-                    .map(Some)
-                    .map_err(|_| {
-                        Error::Decode(DecodeError::ConstraintViolation {
-                            field: format!("Tag {tag}").into(),
-                            reason: "Invalid unsigned integer format".into(),
-                        })
+            Some(field_value) => {
+                // Try to parse the string representation of the field value
+                field_value.to_string().parse().map(Some).map_err(|_| {
+                    Error::Decode(DecodeError::ConstraintViolation {
+                        field: format!("Tag {tag}").into(),
+                        reason: "Invalid unsigned integer format".into(),
                     })
+                })
             }
             None => Ok(None),
         }
