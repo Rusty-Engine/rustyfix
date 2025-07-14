@@ -1,5 +1,4 @@
 cognitive-complexity-threshold = 20
-missing-const-for-fn = "warn"
 
 disallowed-names = [
     "bool",

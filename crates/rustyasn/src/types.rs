@@ -31,7 +31,7 @@ pub struct FixMessage {
 #[rasn(crate_root = "rasn")]
 pub struct Field {
     /// Field tag number
-    pub tag: u16,
+    pub tag: u32,
 
     /// Field value as string (simplified)
     pub value: String,

@@ -114,7 +114,7 @@ impl Message {
                     return None;
                 }
                 self.fields.get(&tag).map(|value| Field {
-                    tag: tag as u16,
+                    tag,
                     value: String::from_utf8_lossy(value).to_string(),
                 })
             })

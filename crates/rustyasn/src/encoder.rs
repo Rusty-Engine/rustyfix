@@ -93,8 +93,8 @@ impl Encoder {
     }
 
     /// Extracts a required string field from a message.
-    fn get_required_string_field<F: FieldMap<u32>>(&self, msg: &F, tag: u16) -> Result<FixString> {
-        msg.get_raw(u32::from(tag))
+    fn get_required_string_field<F: FieldMap<u32>>(&self, msg: &F, tag: u32) -> Result<FixString> {
+        msg.get_raw(tag)
             .ok_or_else(|| {
                 Error::Encode(EncodeError::RequiredFieldMissing {
                     tag,
@@ -109,8 +109,8 @@ impl Encoder {
     }
 
     /// Extracts a required u64 field from a message.
-    fn get_required_u64_field<F: FieldMap<u32>>(&self, msg: &F, tag: u16) -> Result<u64> {
-        let bytes = msg.get_raw(u32::from(tag)).ok_or_else(|| {
+    fn get_required_u64_field<F: FieldMap<u32>>(&self, msg: &F, tag: u32) -> Result<u64> {
+        let bytes = msg.get_raw(tag).ok_or_else(|| {
             Error::Encode(EncodeError::RequiredFieldMissing {
                 tag,
                 name: format!("Tag {tag}").into(),
@@ -141,7 +141,7 @@ impl Encoder {
         for &tag in &common_tags {
             if let Some(raw_data) = msg.get_raw(tag) {
                 let value_str = String::from_utf8_lossy(raw_data);
-                handle.add_field(tag as u16, value_str.to_string());
+                handle.add_field(tag, value_str.to_string());
             }
         }
 
@@ -179,13 +179,13 @@ impl SetField<u32> for EncoderHandle<'_> {
         let value_str = String::from_utf8_lossy(&temp_buffer);
 
         // Add to the message using the existing add_field method
-        self.add_field(field as u16, value_str.to_string());
+        self.add_field(field, value_str.to_string());
     }
 }
 
 impl EncoderHandle<'_> {
     /// Adds a field to the message.
-    pub fn add_field(&mut self, tag: u16, value: impl ToFixFieldValue) -> &mut Self {
+    pub fn add_field(&mut self, tag: u32, value: impl ToFixFieldValue) -> &mut Self {
         self.message.fields.push(Field {
             tag,
             value: value.to_fix_field_value(),
@@ -194,22 +194,22 @@ impl EncoderHandle<'_> {
     }
 
     /// Adds a string field to the message.
-    pub fn add_string(&mut self, tag: u16, value: impl Into<String>) -> &mut Self {
+    pub fn add_string(&mut self, tag: u32, value: impl Into<String>) -> &mut Self {
         self.add_field(tag, value.into())
     }
 
     /// Adds an integer field to the message.
-    pub fn add_int(&mut self, tag: u16, value: i64) -> &mut Self {
+    pub fn add_int(&mut self, tag: u32, value: i64) -> &mut Self {
         self.add_field(tag, value)
     }
 
     /// Adds an unsigned integer field to the message.
-    pub fn add_uint(&mut self, tag: u16, value: u64) -> &mut Self {
+    pub fn add_uint(&mut self, tag: u32, value: u64) -> &mut Self {
         self.add_field(tag, value)
     }
 
     /// Adds a boolean field to the message.
-    pub fn add_bool(&mut self, tag: u16, value: bool) -> &mut Self {
+    pub fn add_bool(&mut self, tag: u32, value: bool) -> &mut Self {
         self.add_field(tag, value)
     }
 

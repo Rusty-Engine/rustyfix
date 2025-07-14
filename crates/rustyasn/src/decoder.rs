@@ -22,7 +22,7 @@ pub struct Message {
     inner: FixMessage,
 
     /// Field lookup map for fast access
-    fields: FxHashMap<u16, String>,
+    fields: FxHashMap<u32, String>,
 }
 
 impl Message {
@@ -65,27 +65,27 @@ impl Message {
     }
 
     /// Gets a field value by tag.
-    pub fn get_field(&self, tag: u16) -> Option<&str> {
+    pub fn get_field(&self, tag: u32) -> Option<&str> {
         self.fields.get(&tag).map(std::string::String::as_str)
     }
 
     /// Gets a string field value.
-    pub fn get_string(&self, tag: u16) -> Option<&str> {
+    pub fn get_string(&self, tag: u32) -> Option<&str> {
         self.get_field(tag)
     }
 
     /// Gets an integer field value.
-    pub fn get_int(&self, tag: u16) -> Option<i64> {
+    pub fn get_int(&self, tag: u32) -> Option<i64> {
         self.get_field(tag)?.parse().ok()
     }
 
     /// Gets an unsigned integer field value.
-    pub fn get_uint(&self, tag: u16) -> Option<u64> {
+    pub fn get_uint(&self, tag: u32) -> Option<u64> {
         self.get_field(tag)?.parse().ok()
     }
 
     /// Gets a boolean field value.
-    pub fn get_bool(&self, tag: u16) -> Option<bool> {
+    pub fn get_bool(&self, tag: u32) -> Option<bool> {
         match self.get_field(tag)? {
             "Y" => Some(true),
             "N" => Some(false),

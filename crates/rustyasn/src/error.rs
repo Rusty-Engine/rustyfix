@@ -43,7 +43,7 @@ pub enum EncodeError {
     #[error("Invalid field value for tag {tag}: {reason}")]
     InvalidFieldValue {
         /// FIX tag number
-        tag: u16,
+        tag: u32,
         /// Reason for invalidity
         reason: FixString,
     },
@@ -61,7 +61,7 @@ pub enum EncodeError {
     #[error("Required field {tag} ({name}) is missing")]
     RequiredFieldMissing {
         /// FIX tag number
-        tag: u16,
+        tag: u32,
         /// Field name
         name: FixString,
     },
@@ -199,7 +199,7 @@ pub(crate) trait ErrorContext<T> {
     fn context(self, msg: impl Into<FixString>) -> Result<T>;
 
     /// Add field context to an error.
-    fn field_context(self, tag: u16, name: impl Into<FixString>) -> Result<T>;
+    fn field_context(self, tag: u32, name: impl Into<FixString>) -> Result<T>;
 }
 
 impl<T, E> ErrorContext<T> for std::result::Result<T, E>
@@ -221,7 +221,7 @@ where
         })
     }
 
-    fn field_context(self, tag: u16, name: impl Into<FixString>) -> Result<T> {
+    fn field_context(self, tag: u32, name: impl Into<FixString>) -> Result<T> {
         self.map_err(|e| {
             let base_error = e.into();
             match base_error {

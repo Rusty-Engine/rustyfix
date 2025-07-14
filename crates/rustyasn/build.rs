@@ -222,9 +222,9 @@ pub enum FixFieldTag {
     }}
 }}
 
-impl From<FixFieldTag> for u16 {{
+impl From<FixFieldTag> for u32 {{
     fn from(tag: FixFieldTag) -> Self {{
-        tag.as_u32() as u16
+        tag.as_u32()
     }}
 }}
 
@@ -327,7 +327,7 @@ pub struct Asn1Field {
         let fields = self.fields
             .iter()
             .map(|field| Field {
-                tag: field.tag.as_u32() as u16,
+                tag: field.tag.as_u32(),
                 value: field.value.clone(),
             })
             .collect();

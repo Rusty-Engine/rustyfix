@@ -51,7 +51,7 @@ mod tests {
         // Test conversion from u32
         if let Some(tag) = FixFieldTag::from_u32(35) {
             assert_eq!(tag.as_u32(), 35);
-            assert_eq!(u16::from(tag), 35u16);
+            assert_eq!(u32::from(tag), 35u32);
         }
 
         // Test invalid tag
