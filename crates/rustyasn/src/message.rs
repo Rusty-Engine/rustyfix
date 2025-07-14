@@ -274,8 +274,8 @@ impl Message {
         self.get(35)
     }
 
-    /// Gets sender company ID field (tag 49).
-    pub fn sender_company_id(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
+    /// Gets sender component ID field (tag 49).
+    pub fn sender_comp_id(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
         self.get(49)
     }
 
@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(msg_type_result.as_str(), "D");
 
         let sender = message
-            .sender_company_id()
+            .sender_comp_id()
             .expect("Sender company ID should be accessible in test message");
         assert_eq!(sender.as_str(), "SENDER");
 
