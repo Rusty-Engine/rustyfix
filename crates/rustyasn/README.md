@@ -4,7 +4,7 @@ Abstract Syntax Notation One (ASN.1) encoding support for the RustyFix FIX proto
 
 ## Features
 
-- Multiple encoding rules: BER, DER, PER, OER
+- Multiple encoding rules: BER, DER, OER
 - Zero-copy decoding where possible
 - Streaming support for continuous message processing
 - Type-safe ASN.1 schema compilation
@@ -15,7 +15,6 @@ Abstract Syntax Notation One (ASN.1) encoding support for the RustyFix FIX proto
 
 - **BER** (Basic Encoding Rules) - Self-describing, flexible format
 - **DER** (Distinguished Encoding Rules) - Canonical subset of BER, deterministic encoding
-- **PER** (Packed Encoding Rules) - Compact, bit-oriented format for maximum efficiency
 - **OER** (Octet Encoding Rules) - Byte-aligned, balance between efficiency and simplicity
 
 ## Usage
@@ -87,7 +86,7 @@ while let Some(message) = decoder.decode_next()? {
 
 ```rust
 // Optimized for low-latency trading
-let config = Config::low_latency();  // Uses PER, skips validation
+let config = Config::low_latency();  // Uses OER, skips validation
 
 // Optimized for reliability and compliance
 let config = Config::high_reliability();  // Uses DER, full validation
@@ -101,9 +100,8 @@ config.enable_zero_copy = true;
 ## Performance Considerations
 
 1. **Encoding Rule Selection**:
-   - PER: Most compact, best for low-latency
+   - OER: Most compact of supported rules, best for low-latency
    - DER: Deterministic, best for audit trails
-   - OER: Good balance, efficient software processing
    - BER: Most flexible, larger size
 
 2. **Zero-Copy Operations**: Enable with `config.enable_zero_copy = true`
@@ -122,7 +120,6 @@ use rustysofh::EncodingType;
 // SOFH encoding types for ASN.1
 let encoding = match rule {
     EncodingRule::BER | EncodingRule::DER => EncodingType::Asn1BER,
-    EncodingRule::PER => EncodingType::Asn1PER,
     EncodingRule::OER => EncodingType::Asn1OER,
 };
 ```

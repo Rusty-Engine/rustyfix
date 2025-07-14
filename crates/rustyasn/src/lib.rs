@@ -5,7 +5,6 @@
 //!
 //! - **BER** (Basic Encoding Rules) - Self-describing, flexible
 //! - **DER** (Distinguished Encoding Rules) - Canonical subset of BER
-//! - **PER** (Packed Encoding Rules) - Compact, bit-oriented
 //! - **OER** (Octet Encoding Rules) - Byte-aligned, efficient
 //!
 //! ## Features
@@ -23,7 +22,7 @@
 //! use rustyfix::Dictionary;
 //!
 //! // Configure encoding
-//! let config = Config::new(EncodingRule::PER);
+//! let config = Config::new(EncodingRule::OER);
 //! let dictionary = Dictionary::fix44();
 //!
 //! // Encode a message

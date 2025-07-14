@@ -8,7 +8,7 @@ edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
-keywords = ["fix", "asn1", "ber", "der", "per"]
+keywords = ["fix", "asn1", "ber", "der", "oer"]
 
 [lints]
 workspace = true
