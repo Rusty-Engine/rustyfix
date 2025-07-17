@@ -27,21 +27,19 @@ const SCHEMA_TRANSFORM_SPAN: &str = "asn1.schema.transform";
 const SCHEMA_PARSE_SPAN: &str = "asn1.schema.parse";
 const SCHEMA_SERIALIZE_SPAN: &str = "asn1.schema.serialize";
 
-/// Creates a new span for encoding operations.
+/// Creates a distributed tracing span for ASN.1 encoding operations.
 ///
-/// This function creates a distributed tracing span to track ASN.1 encoding operations.
-/// The span helps monitor encoding performance and debug issues in high-throughput
-/// financial messaging systems.
+/// Tracks encoding performance and aids in debugging high-throughput systems.
 ///
 /// # Arguments
 ///
-/// * `encoding_rule` - The ASN.1 encoding rule being used (e.g., "BER", "DER", "OER")
-/// * `_message_type` - The FIX message type being encoded (currently unused but reserved for future metrics)
+/// * `encoding_rule` - The ASN.1 encoding rule being used (e.g., "BER", "DER", "OER").
+/// * `_message_type` - Reserved for future metrics; currently unused.
 ///
 /// # Returns
 ///
-/// A [`Span`] that tracks the encoding operation. The span is automatically entered
-/// and will be exited when dropped.
+/// A [`Span`] that tracks the encoding operation. The span is entered automatically
+/// and exits when dropped.
 ///
 /// # Examples
 ///

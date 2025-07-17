@@ -17,8 +17,34 @@ use smartstring::{LazyCompact, SmartString};
 type FixString = SmartString<LazyCompact>;
 use std::sync::Arc;
 
+// FIX standard header field tags
+/// FIX field tag for `BeginString` (8).
+pub const BEGIN_STRING_TAG: u32 = 8;
+/// FIX field tag for `BodyLength` (9).
+pub const BODY_LENGTH_TAG: u32 = 9;
+/// FIX field tag for `CheckSum` (10).
+pub const CHECK_SUM_TAG: u32 = 10;
+/// FIX field tag for `MsgSeqNum` (34).
+pub const MSG_SEQ_NUM_TAG: u32 = 34;
+/// FIX field tag for `MsgType` (35).
+pub const MSG_TYPE_TAG: u32 = 35;
+/// FIX field tag for `SenderCompID` (49).
+pub const SENDER_COMP_ID_TAG: u32 = 49;
+/// FIX field tag for `SendingTime` (52).
+pub const SENDING_TIME_TAG: u32 = 52;
+/// FIX field tag for `TargetCompID` (56).
+pub const TARGET_COMP_ID_TAG: u32 = 56;
+
 // Size estimation constants for performance and maintainability
-/// Base overhead for ASN.1 message structure including message sequence number encoding
+/// Base overhead for ASN.1 message structure.
+///
+/// This value represents the fixed overhead in bytes for encoding an ASN.1 message.
+/// It includes:
+/// - 2 bytes for the SEQUENCE tag of the message structure
+/// - 2 bytes for the length encoding of the message sequence  
+/// - 16 bytes for the message sequence number encoding (assuming a 128-bit integer)
+///
+/// These components add up to a total of 20 bytes of base overhead.
 pub const BASE_ASN1_OVERHEAD: usize = 20;
 
 /// Conservative estimate for ASN.1 tag encoding size (handles up to 5-digit tag numbers)
@@ -163,10 +189,10 @@ impl Encoder {
     /// - ASN.1 encoding fails due to internal errors
     pub fn encode_message<F: FieldMap<u32>>(&self, msg: &F) -> Result<Vec<u8>> {
         // Extract standard header fields
-        let msg_type = Self::get_required_string_field(msg, 35)?;
-        let sender = Self::get_required_string_field(msg, 49)?;
-        let target = Self::get_required_string_field(msg, 56)?;
-        let seq_num = Self::get_required_u64_field(msg, 34)?;
+        let msg_type = Self::get_required_string_field(msg, MSG_TYPE_TAG)?;
+        let sender = Self::get_required_string_field(msg, SENDER_COMP_ID_TAG)?;
+        let target = Self::get_required_string_field(msg, TARGET_COMP_ID_TAG)?;
+        let seq_num = Self::get_required_u64_field(msg, MSG_SEQ_NUM_TAG)?;
 
         let mut handle = self.start_message(&msg_type, &sender, &target, seq_num);
 
@@ -294,14 +320,14 @@ impl Encoder {
     const fn is_standard_header_field(tag: u32) -> bool {
         matches!(
             tag,
-            8 |  // BeginString
-            9 |  // BodyLength  
-            10 | // CheckSum
-            34 | // MsgSeqNum
-            35 | // MsgType
-            49 | // SenderCompID
-            52 | // SendingTime
-            56 // TargetCompID
+            BEGIN_STRING_TAG |      // BeginString
+            BODY_LENGTH_TAG |       // BodyLength  
+            CHECK_SUM_TAG |         // CheckSum
+            MSG_SEQ_NUM_TAG |       // MsgSeqNum
+            MSG_TYPE_TAG |          // MsgType
+            SENDER_COMP_ID_TAG |    // SenderCompID
+            SENDING_TIME_TAG |      // SendingTime
+            TARGET_COMP_ID_TAG // TargetCompID
         )
     }
 

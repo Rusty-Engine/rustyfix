@@ -3,6 +3,9 @@
 //! This module provides the core message types that implement `RustyFix` traits
 //! for seamless integration with the FIX protocol ecosystem.
 
+use crate::encoder::{
+    MSG_SEQ_NUM_TAG, MSG_TYPE_TAG, SENDER_COMP_ID_TAG, SENDING_TIME_TAG, TARGET_COMP_ID_TAG,
+};
 use crate::field_types::{Asn1FieldError, Asn1String, Asn1UInteger};
 use crate::generated::{Asn1Field, Asn1FixMessage, FixFieldTag, FixMessageType};
 use crate::traits::{FieldMap, FieldType, FieldValueError, RepeatingGroup};
@@ -40,17 +43,20 @@ impl Message {
         let mut field_order = Vec::new();
 
         // Add standard header fields
-        fields.insert(35, msg_type.as_str().as_bytes().to_vec());
-        field_order.push(35);
+        fields.insert(MSG_TYPE_TAG, msg_type.as_str().as_bytes().to_vec());
+        field_order.push(MSG_TYPE_TAG);
 
-        fields.insert(49, sender_comp_id.as_bytes().to_vec());
-        field_order.push(49);
+        fields.insert(SENDER_COMP_ID_TAG, sender_comp_id.as_bytes().to_vec());
+        field_order.push(SENDER_COMP_ID_TAG);
 
-        fields.insert(56, target_comp_id.as_bytes().to_vec());
-        field_order.push(56);
+        fields.insert(TARGET_COMP_ID_TAG, target_comp_id.as_bytes().to_vec());
+        field_order.push(TARGET_COMP_ID_TAG);
 
-        fields.insert(34, ToString::to_string(&msg_seq_num).as_bytes().to_vec());
-        field_order.push(34);
+        fields.insert(
+            MSG_SEQ_NUM_TAG,
+            ToString::to_string(&msg_seq_num).as_bytes().to_vec(),
+        );
+        field_order.push(MSG_SEQ_NUM_TAG);
 
         Self {
             msg_type,
@@ -75,17 +81,18 @@ impl Message {
 
         // Extract sending_time from fields (tag 52) if present
         // Use as_bytes() to preserve exact format and prevent data loss
-        if let Some(sending_time_field) = fix_msg.fields.iter().find(|f| f.tag == 52) {
+        if let Some(sending_time_field) = fix_msg.fields.iter().find(|f| f.tag == SENDING_TIME_TAG)
+        {
             let sending_time_bytes = sending_time_field.value.as_bytes();
             let sending_time = String::from_utf8_lossy(&sending_time_bytes).to_string();
             message.sending_time = Some(sending_time);
-            message.set_field(52, sending_time_bytes);
+            message.set_field(SENDING_TIME_TAG, sending_time_bytes);
         }
 
         // Add additional fields
         for field in &fix_msg.fields {
             // Skip sending_time as it's already processed above
-            if field.tag == 52 {
+            if field.tag == SENDING_TIME_TAG {
                 continue;
             }
             message.set_field(field.tag, field.value.as_bytes().clone());
@@ -105,7 +112,7 @@ impl Message {
 
         if let Some(ref sending_time) = asn1_msg.sending_time {
             message.sending_time = Some(sending_time.clone());
-            message.set_field(52, sending_time.as_bytes().to_vec());
+            message.set_field(SENDING_TIME_TAG, sending_time.as_bytes().to_vec());
         }
 
         // Add ASN.1 fields
@@ -124,7 +131,14 @@ impl Message {
             .iter()
             .filter_map(|&tag| {
                 // Skip standard header fields that are already in the struct
-                if matches!(tag, 35 | 49 | 56 | 34 | 52) {
+                if matches!(
+                    tag,
+                    MSG_TYPE_TAG
+                        | SENDER_COMP_ID_TAG
+                        | TARGET_COMP_ID_TAG
+                        | MSG_SEQ_NUM_TAG
+                        | SENDING_TIME_TAG
+                ) {
                     return None;
                 }
                 self.fields.get(&tag).map(|value| Field {
@@ -186,7 +200,14 @@ impl Message {
             .iter()
             .filter_map(|&tag| {
                 // Skip standard header fields
-                if matches!(tag, 35 | 49 | 56 | 34 | 52) {
+                if matches!(
+                    tag,
+                    MSG_TYPE_TAG
+                        | SENDER_COMP_ID_TAG
+                        | TARGET_COMP_ID_TAG
+                        | MSG_SEQ_NUM_TAG
+                        | SENDING_TIME_TAG
+                ) {
                     return None;
                 }
                 let field_tag = FixFieldTag::from_u32(tag)?;
@@ -399,27 +420,27 @@ impl RepeatingGroup for MessageGroup {
 impl Message {
     /// Gets message type field (tag 35).
     pub fn message_type(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
-        self.get(35)
+        self.get(MSG_TYPE_TAG)
     }
 
     /// Gets sender component ID field (tag 49).
     pub fn sender_comp_id(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
-        self.get(49)
+        self.get(SENDER_COMP_ID_TAG)
     }
 
     /// Gets target component ID field (tag 56).
     pub fn target_comp_id(&self) -> Result<Asn1String, FieldValueError<Asn1FieldError>> {
-        self.get(56)
+        self.get(TARGET_COMP_ID_TAG)
     }
 
     /// Gets message sequence number field (tag 34).
     pub fn msg_seq_num(&self) -> Result<Asn1UInteger, FieldValueError<Asn1FieldError>> {
-        self.get(34)
+        self.get(MSG_SEQ_NUM_TAG)
     }
 
     /// Gets sending time field (tag 52).
     pub fn sending_time(&self) -> Result<Option<Asn1String>, Asn1FieldError> {
-        self.get_opt(52)
+        self.get_opt(SENDING_TIME_TAG)
     }
 
     /// Gets symbol field (tag 55) if present.
