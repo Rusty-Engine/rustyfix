@@ -45,7 +45,7 @@
   - Renamed `is_valid_asn1_tag` to `is_plausible_start_tag` for clarity
   - Optimized const fn usage (`is_standard_header_field` already const)
   - Removed UTC timestamp length restrictions for variable fractional seconds
-  - Replaced `format!` with static strings in tracing hot paths
+- Replaced `format!` with static strings in tracing hot paths
   - Fixed SmallVec inline detection with `spilled()` method
 - **Style & Cleanup**:
   - Added missing newlines to Cargo.toml and README.md files
