@@ -1,0 +1,76 @@
+[package]
+name = "rustyasn"
+description = "Abstract Syntax Notation One (ASN.1) encoding support for RustyFix"
+documentation = "https://docs.rs/rustyasn"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+keywords = ["fix", "asn1", "ber", "der", "oer"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true, optional = true }
+simd-json = { workspace = true }
+# Core dependencies
+rustyfix-dictionary = { path = "../rustyfix-dictionary" }
+
+# ASN.1 library
+rasn = "0.27"
+
+# Date/Time handling
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+
+# Performance and utility
+smallvec = { workspace = true }
+smartstring = { workspace = true }
+rustc-hash = { workspace = true }
+bytes = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+zerocopy = { workspace = true }
+
+# Optional dependencies
+fastrace = { workspace = true, optional = true }
+log = { workspace = true }
+
+[dev-dependencies]
+# Testing
+quickcheck = { workspace = true }
+quickcheck_macros = { workspace = true }
+criterion = { workspace = true }
+pretty_assertions = "1.4"
+
+# Utilities
+hex = "0.4"
+env_logger = { workspace = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+tracing = ["dep:fastrace"]
+fix40 = ["rustyfix-dictionary/fix40"]
+fix50 = ["rustyfix-dictionary/fix50"]
+
+[build-dependencies]
+# For code generation from ASN.1 schemas and FIX dictionaries
+rustyfix-codegen = { path = "../rustyfix-codegen" }
+rustyfix-dictionary = { path = "../rustyfix-dictionary", features = [
+    "fix40",
+    "fix50",
+] }
+
+# Build script utilities
+anyhow = "1.0"
+heck = "0.5"
+glob = "0.3"
+chrono = { workspace = true }
+
+[[bench]]
+name = "asn1_encodings"
+harness = false

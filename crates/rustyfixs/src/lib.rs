@@ -195,17 +195,23 @@ impl FixOverTlsCommon for FixOverTlsV10 {
 mod test {
     #[test]
     #[cfg(feature = "utils-openssl")]
-    fn v1_acceptor_is_ok() {
+    fn v1_acceptor_is_ok() -> Result<(), Box<dyn std::error::Error>> {
         use super::*;
 
-        FixOverTlsV10.recommended_acceptor_builder().unwrap();
+        FixOverTlsV10.recommended_acceptor_builder().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Failed to create acceptor builder: {e}"))
+        })?;
+        Ok(())
     }
 
     #[test]
     #[cfg(feature = "utils-openssl")]
-    fn v1_connector_is_ok() {
+    fn v1_connector_is_ok() -> Result<(), Box<dyn std::error::Error>> {
         use super::*;
 
-        FixOverTlsV10.recommended_connector_builder().unwrap();
+        FixOverTlsV10.recommended_connector_builder().map_err(|e| {
+            Box::<dyn std::error::Error>::from(format!("Failed to create connector builder: {e}"))
+        })?;
+        Ok(())
     }
 }

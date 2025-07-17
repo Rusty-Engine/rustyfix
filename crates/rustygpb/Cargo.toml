@@ -18,8 +18,8 @@ zerocopy = { workspace = true }
 simd_aligned = { workspace = true }
 
 # Protocol Buffers
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 bytes = "1.7"
 crc32c = "0.6"
 
@@ -27,12 +27,12 @@ crc32c = "0.6"
 serde = { workspace = true, optional = true }
 
 [build-dependencies]
-prost-build = "0.13"
+prost-build = "0.14"
 
 [dev-dependencies]
 proptest = "1.5"
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true, features = ["html_reports"] }
 
 [features]
 default = []
-serde = [ "dep:serde" ]
+serde = ["dep:serde"]

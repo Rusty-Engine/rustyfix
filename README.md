@@ -4,7 +4,7 @@
 
 </div>
 
-RustyFix is a free and open source FIX engine implementation forked from [FerrumFIX](https://github.com/ferrumfix/ferrumfix) in Rust. Please note that it's currently under heavy development and wildly unstable, so all interested parties should refrain from using it in production prior to its 1.0 release. Performance and full adherence to the FIX protocol are nevertheless core goals of the project which, if anything, might serve as a useful foundation for others' work.
+RustyFix is a free and open source FIX engine implementation forked from [FerrumFIX](https://github.com/ferrumfix/ferrumfix) in Rust. Please note that it's currently under heavy development and wildly unstable, so all interested parties should refrain from using it in production prior to its 1.0 release.
 
 - [RustyFix](#rustyfix)
 	- [About](#about)
@@ -15,8 +15,6 @@ RustyFix is a free and open source FIX engine implementation forked from [Ferrum
 RustyFix provides parsing, validation, error recovery, and (de)serialization for the FIX family of protocols.
 
 ![FIX Technical Standard stack](https://github.com/rusty-engine/rustyfix/raw/main/docs/FIX-Technical-Standard-Stack.png)
-
-The above illustration succintly describes the full scope of FIX and it serves as a reference point for all modern FIX implementations. RustyFix aims with total compliance... *eventually*. Engineering efforts are initially focused on core features e.g. tag-value encoding and FIX 4.4.
 
 RustyFix enforces strict separation of concerns according to the OSI model, as reasonably allowed by the FIX specification.
 
@@ -41,7 +39,7 @@ You don't have to understand the whole tech stack to use a single layer; in fact
 - [x] Simple Binary Encoding (SBE). [Working on validations]
 - [x] Google Protocol Buffers (GPB). [Working on validations]
 - [X] JavaScript Object Notation (JSON).
-- [ ] Abstract Syntax Notation (ASN.1).
+- [x] Abstract Syntax Notation (ASN.1). [Working on validations]
 - [x] FIX Adapted for STreaming (FAST).
 
 ## Legal

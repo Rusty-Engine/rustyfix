@@ -16,7 +16,7 @@ fastrace = { workspace = true }
 thiserror = { workspace = true }
 
 # XML processing
-quick-xml = "0.36"
+quick-xml = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
 # Optional features
@@ -24,9 +24,9 @@ chrono = { version = "0.4", optional = true }
 
 [dev-dependencies]
 proptest = "1.5"
-criterion = { version = "0.5", features = ["html_reports"] }
-tokio = { version = "1.0", features = ["full"] }
+criterion = { workspace = true, features = ["html_reports"] }
+tokio = { workspace = true }
 
 [features]
-default = [ "timestamps" ]
-timestamps = [ "chrono" ]
+default = ["timestamps"]
+timestamps = ["chrono"]

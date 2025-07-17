@@ -5,7 +5,8 @@ use std::io::{self, Write};
 #[test]
 fn test_fix44_codegen() -> io::Result<()> {
     // Generate code for FIX 4.4
-    let fix_dictionary = Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary");
+    let fix_dictionary =
+        Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for codegen test");
     let rust_code = {
         let settings = rustyfix_codegen::Settings::default();
         rustyfix_codegen::gen_definitions(&fix_dictionary, &settings)
@@ -32,7 +33,8 @@ fn test_fix44_codegen() -> io::Result<()> {
 fn test_begin_string_field_definition() {
     use rustyfix_codegen::{Settings, gen_definitions};
 
-    let fix_dictionary = Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary");
+    let fix_dictionary =
+        Dictionary::fix44().expect("Failed to load FIX 4.4 dictionary for codegen test");
     let rust_code = gen_definitions(&fix_dictionary, &Settings::default());
 
     // Verify that BeginString field is generated correctly

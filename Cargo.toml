@@ -12,16 +12,22 @@ members = [
 resolver = "2"
 
 [workspace.package]
-authors = ["cognitive-glitch", "Team Rusty Trading", "Filippo Neysofu Costa"]
-version = "0.7.3"
+authors = ["cognitive-glitch", "Rusty Trading Team", "Filippo Neysofu Costa"]
+version = "0.7.4"
 edition = "2024"
 homepage = "https://github.com/rusty-trading/rusty-fix-engine"
 repository = "https://github.com/rusty-trading/rusty-fix-engine"
 description = "FIX & FAST (FIX Adapted for STreaming) in pure Rust"
 publish = true
 readme = "README.md"
-keywords = ["fix", "fast", "protocol", "finance", "fintech"]
-categories = ["network-programming", "parser-implementations", "encoding"]
+keywords = ["fix", "fix-protocol", "fast", "trading", "hft"]
+categories = [
+    "network-programming",
+    "parser-implementations",
+    "encoding",
+    "finance",
+    "development-tools",
+]
 license = "Apache-2.0"
 
 # Workspace-wide linting configuration

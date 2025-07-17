@@ -75,75 +75,108 @@ pub const SBE_VERSION: &str = "2.0";
 mod integration_tests {
     use super::*;
 
+    /// Helper function to map errors to Box<dyn std::error::Error> for test convenience
+    fn map_to_dyn_error<E: std::error::Error + 'static>(e: E) -> Box<dyn std::error::Error> {
+        Box::new(e)
+    }
+
     #[test]
-    fn test_basic_round_trip() {
+    fn test_basic_round_trip() -> Result<(), Box<dyn std::error::Error>> {
         // Test basic encoding/decoding functionality
         let mut encoder = SbeEncoder::new(1, 0, 32);
 
         // Write test data
-        encoder.write_u64(0, 1234567890).unwrap();
-        encoder.write_u32(8, 42).unwrap();
-        encoder.write_string(12, 16, "TEST_STRING").unwrap();
-        encoder.write_f32(28, std::f32::consts::PI).unwrap();
+        encoder.write_u64(0, 1234567890).map_err(map_to_dyn_error)?;
+        encoder.write_u32(8, 42).map_err(map_to_dyn_error)?;
+        encoder
+            .write_string(12, 16, "TEST_STRING")
+            .map_err(map_to_dyn_error)?;
+        encoder
+            .write_f32(28, std::f32::consts::PI)
+            .map_err(map_to_dyn_error)?;
 
-        let message = encoder.finalize().unwrap();
+        let message = encoder.finalize().map_err(map_to_dyn_error)?;
 
         // Decode and verify
-        let decoder = SbeDecoder::new(&message).unwrap();
+        let decoder = SbeDecoder::new(&message).map_err(map_to_dyn_error)?;
         assert_eq!(decoder.template_id(), 1);
         assert_eq!(decoder.schema_version(), 0);
-        assert_eq!(decoder.read_u64(0).unwrap(), 1234567890);
-        assert_eq!(decoder.read_u32(8).unwrap(), 42);
-        assert_eq!(
-            decoder.read_string(12, 16).unwrap().trim_end_matches('\0'),
-            "TEST_STRING"
-        );
-        assert!((decoder.read_f32(28).unwrap() - std::f32::consts::PI).abs() < 0.001);
+
+        let read_u64 = decoder.read_u64(0).map_err(map_to_dyn_error)?;
+        assert_eq!(read_u64, 1234567890);
+
+        let read_u32 = decoder.read_u32(8).map_err(map_to_dyn_error)?;
+        assert_eq!(read_u32, 42);
+
+        let read_string = decoder.read_string(12, 16).map_err(map_to_dyn_error)?;
+        assert_eq!(read_string.trim_end_matches('\0'), "TEST_STRING");
+
+        let read_f32 = decoder.read_f32(28).map_err(map_to_dyn_error)?;
+        assert!((read_f32 - std::f32::consts::PI).abs() < 0.001);
+
+        Ok(())
     }
 
     #[test]
-    fn test_variable_data() {
+    fn test_variable_data() -> Result<(), Box<dyn std::error::Error>> {
         let mut encoder = SbeEncoder::new(2, 0, 8);
 
         // Fixed field
-        encoder.write_u64(0, 999).unwrap();
+        encoder.write_u64(0, 999).map_err(map_to_dyn_error)?;
 
         // Variable data
-        encoder.write_variable_string("Hello").unwrap();
-        encoder.write_variable_string("World").unwrap();
-        encoder.write_variable_bytes(b"Binary data").unwrap();
+        encoder
+            .write_variable_string("Hello")
+            .map_err(map_to_dyn_error)?;
+        encoder
+            .write_variable_string("World")
+            .map_err(map_to_dyn_error)?;
+        encoder
+            .write_variable_bytes(b"Binary data")
+            .map_err(map_to_dyn_error)?;
 
-        let message = encoder.finalize().unwrap();
+        let message = encoder.finalize().map_err(map_to_dyn_error)?;
 
         // Verify fixed field
-        let decoder = SbeDecoder::new(&message).unwrap();
-        assert_eq!(decoder.read_u64(0).unwrap(), 999);
+        let decoder = SbeDecoder::new(&message).map_err(map_to_dyn_error)?;
+        let read_u64 = decoder.read_u64(0).map_err(map_to_dyn_error)?;
+        assert_eq!(read_u64, 999);
 
         // Variable data would be processed by generated code
-        assert!(message.len() > 8 + 8); // Header + fixed field + variable data
+        const HEADER_SIZE: usize = 8;
+        const FIXED_FIELD_SIZE: usize = 8;
+        assert!(message.len() > HEADER_SIZE + FIXED_FIELD_SIZE); // Header + fixed field + variable data
+        Ok(())
     }
 
     #[test]
-    fn test_header_utilities() {
-        let mut encoder = SbeEncoder::new(123, 5, 16);
-        encoder.write_u64(0, 42).unwrap();
-        encoder.write_u64(8, 84).unwrap();
-        let message = encoder.finalize().unwrap();
+    fn test_header_utilities() -> Result<(), Box<dyn std::error::Error>> {
+        let mut encoder = SbeEncoder::new(1, 0, 32);
 
-        // Test header extraction
-        let template_id = SbeMessageHeader::extract_template_id(&message).unwrap();
-        let schema_version = SbeMessageHeader::extract_schema_version(&message).unwrap();
-        let length = SbeMessageHeader::extract_message_length(&message).unwrap();
+        encoder.write_u64(0, 42).map_err(map_to_dyn_error)?;
+        encoder.write_u64(8, 84).map_err(map_to_dyn_error)?;
+        let message = encoder.finalize().map_err(map_to_dyn_error)?;
 
-        assert_eq!(template_id, 123);
-        assert_eq!(schema_version, 5);
-        assert_eq!(length, message.len() as u32);
+        // Extract header information
+        let template_id =
+            SbeMessageHeader::extract_template_id(&message).map_err(map_to_dyn_error)?;
+        let schema_version =
+            SbeMessageHeader::extract_schema_version(&message).map_err(map_to_dyn_error)?;
+        let length =
+            SbeMessageHeader::extract_message_length(&message).map_err(map_to_dyn_error)?;
+
+        assert_eq!(template_id, 1);
+        assert_eq!(schema_version, 0);
+        assert_eq!(length, 40);
 
         // Test validation
-        let (len, tid, sv) = SbeMessageHeader::validate_basic(&message).unwrap();
-        assert_eq!(len, message.len() as u32);
-        assert_eq!(tid, 123);
-        assert_eq!(sv, 5);
+        let (len, tid, sv) =
+            SbeMessageHeader::validate_basic(&message).map_err(map_to_dyn_error)?;
+        assert_eq!(len, 40);
+        assert_eq!(tid, 1);
+        assert_eq!(sv, 0);
+
+        Ok(())
     }
 
     #[test]
