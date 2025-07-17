@@ -17,11 +17,10 @@ workspace = true
 serde = { workspace = true, optional = true }
 simd-json = { workspace = true }
 # Core dependencies
-rustyfix = { path = "../rustyfix", version = "0.7.4", features = ["fix50"] }
-rustyfix-dictionary = { path = "../rustyfix-dictionary", version = "0.7.4" }
+rustyfix-dictionary = { path = "../rustyfix-dictionary" }
 
 # ASN.1 library
-rasn = "0.18"
+rasn = "0.27"
 
 # Date/Time handling
 chrono = { workspace = true }
@@ -53,15 +52,15 @@ env_logger = { workspace = true }
 
 [features]
 default = []
-serde = [ "dep:serde" ]
-tracing = [ "dep:fastrace" ]
-fix40 = [ "rustyfix-dictionary/fix40" ]
-fix50 = [ "rustyfix-dictionary/fix50" ]
+serde = ["dep:serde"]
+tracing = ["dep:fastrace"]
+fix40 = ["rustyfix-dictionary/fix40"]
+fix50 = ["rustyfix-dictionary/fix50"]
 
 [build-dependencies]
 # For code generation from ASN.1 schemas and FIX dictionaries
-rustyfix-codegen = { path = "../rustyfix-codegen", version = "0.7.4" }
-rustyfix-dictionary = { path = "../rustyfix-dictionary", version = "0.7.4", features = [
+rustyfix-codegen = { path = "../rustyfix-codegen" }
+rustyfix-dictionary = { path = "../rustyfix-dictionary", features = [
     "fix40",
     "fix50",
 ] }
