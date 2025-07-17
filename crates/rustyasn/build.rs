@@ -253,7 +253,7 @@ fn generate_fix_dictionary_asn1(
 // DO NOT EDIT MANUALLY - ALL CHANGES WILL BE OVERWRITTEN.
 // Generated on: {}
 
-use rasn::{{AsnType, Decode, Encode}};
+use rasn::{{AsnType, Decode, Encode, Decoder}};
 use crate::types::{{Field, ToFixFieldValue}};
 
 "#,
@@ -1194,7 +1194,7 @@ fn generate_rust_from_asn1(schema: &Asn1Schema, schema_file: &Path) -> Result<St
 //! DO NOT EDIT MANUALLY - ALL CHANGES WILL BE OVERWRITTEN.
 //! Generated on: {}
 
-use rasn::{{AsnType, Decode, Encode}};
+use rasn::{{AsnType, Decode, Encode, Decoder}};
 
 "#,
         schema_file.display(),
