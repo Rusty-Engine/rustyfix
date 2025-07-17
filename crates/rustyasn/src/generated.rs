@@ -23,6 +23,7 @@ pub mod fix50 {
 // Types are directly available from the included generated code
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::{Field, FixMessage};

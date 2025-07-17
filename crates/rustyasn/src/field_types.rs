@@ -420,6 +420,7 @@ impl<'a> FieldType<'a> for Asn1Bytes {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

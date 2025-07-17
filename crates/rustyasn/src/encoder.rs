@@ -507,6 +507,7 @@ impl EncoderStreaming {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -536,7 +537,7 @@ mod tests {
         handle
             .add_string(55, "EUR/USD")
             .add_int(54, 1)
-            .add_uint(38, 1000000)
+            .add_uint(38, 1_000_000)
             .add_bool(114, true);
 
         assert_eq!(handle.message.fields.len(), 4);
@@ -550,7 +551,7 @@ mod tests {
         );
         assert_eq!(
             handle.message.fields[2].value,
-            crate::types::FixFieldValue::UnsignedInteger(1000000)
+            crate::types::FixFieldValue::UnsignedInteger(1_000_000)
         );
         assert_eq!(
             handle.message.fields[3].value,

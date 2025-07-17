@@ -1,5 +1,7 @@
 //! Integration tests for RustyASN encoding and decoding.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use rustyasn::{Config, Decoder, Encoder, EncodingRule};
 use rustyfix_dictionary::Dictionary;
 use std::sync::Arc;

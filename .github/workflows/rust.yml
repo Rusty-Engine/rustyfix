@@ -44,13 +44,3 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features --workspace
-
-      - name: Const Fn Audit
-        run: |
-          # Run const fn audit to detect opportunities
-          if [ -f "scripts/const_fn_audit.sh" ]; then
-            chmod +x scripts/const_fn_audit.sh
-            ./scripts/const_fn_audit.sh -v || echo "Const fn opportunities detected (non-blocking)"
-          else
-            echo "Const fn audit script not found, skipping"
-          fi
