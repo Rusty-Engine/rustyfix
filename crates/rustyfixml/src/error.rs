@@ -29,6 +29,10 @@ pub enum FixmlError {
     /// Attribute error
     #[error("Attribute error: {0}")]
     Attribute(#[from] quick_xml::events::attributes::AttrError),
+
+    /// IO error
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Errors during FIXML encoding.

@@ -61,7 +61,7 @@
 //!
 //! ```rust,no_run
 //! use rustyasn::{Config, Encoder, Decoder, EncodingRule};
-//! use rustyfix::Dictionary;
+//! use rustyfix_dictionary::Dictionary;
 //! use std::sync::Arc;
 //!
 //! fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -114,6 +114,7 @@ pub mod field_types;
 pub mod generated;
 pub mod message;
 pub mod schema;
+pub mod traits;
 pub mod types;
 
 #[cfg(feature = "tracing")]

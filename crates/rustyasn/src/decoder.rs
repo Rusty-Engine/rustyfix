@@ -4,12 +4,13 @@ use crate::{
     config::{Config, EncodingRule},
     error::{DecodeError, Error, Result},
     schema::Schema,
+    traits::{GetConfig, StreamingDecoder},
     types::FixMessage,
 };
 use bytes::Bytes;
 use rasn::{ber::decode as ber_decode, der::decode as der_decode, oer::decode as oer_decode};
 use rustc_hash::FxHashMap;
-use rustyfix::{Dictionary, GetConfig, StreamingDecoder as StreamingDecoderTrait};
+use rustyfix_dictionary::Dictionary;
 use std::sync::Arc;
 
 // ASN.1 tag constants
@@ -392,8 +393,10 @@ impl DecoderStreaming {
         }
 
         // Validate ASN.1 tags based on their structure and class
-        // Universal class tags (0x00-0x1F) - exclude 0x00 which is reserved
-        if (0x01..=0x1F).contains(&tag) {
+        // Universal class tags:
+        // - 0x01-0x1F: Primitive universal class tags
+        // - 0x20-0x3F: Constructed universal class tags (e.g., 0x30 = SEQUENCE, 0x31 = SET)
+        if (0x01..=0x3F).contains(&tag) {
             return true;
         }
 
@@ -412,7 +415,6 @@ impl DecoderStreaming {
             return true;
         }
 
-        // Tags 0x20-0x3F are reserved for future use
         false
     }
 
@@ -461,7 +463,7 @@ impl DecoderStreaming {
     }
 }
 
-impl StreamingDecoderTrait for DecoderStreaming {
+impl StreamingDecoder for DecoderStreaming {
     type Buffer = Vec<u8>;
     type Error = Error;
 

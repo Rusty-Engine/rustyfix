@@ -5,8 +5,8 @@
 
 use crate::field_types::{Asn1FieldError, Asn1String, Asn1UInteger};
 use crate::generated::{Asn1Field, Asn1FixMessage, FixFieldTag, FixMessageType};
+use crate::traits::{FieldMap, FieldType, FieldValueError, RepeatingGroup};
 use crate::types::{Field, FixMessage};
-use rustyfix::{FieldMap, FieldType, FieldValueError, RepeatingGroup};
 use std::collections::HashMap;
 
 /// ASN.1 message that implements `FieldMap` for rustyfix integration.
@@ -313,7 +313,7 @@ impl FieldMap<u32> for Message {
                 // TODO: Add proper logging when fastrace logging API is stable
 
                 // Map to the required error type for the trait
-                FieldValueError::Invalid(rustyfix::field_types::InvalidInt)
+                FieldValueError::Invalid(crate::traits::InvalidInt)
             })?;
 
         Ok(MessageGroup::new(entries))
@@ -349,7 +349,7 @@ impl FieldMap<u32> for Message {
                         // TODO: Add proper logging when fastrace logging API is stable
 
                         // Map to the required error type for the trait
-                        rustyfix::field_types::InvalidInt
+                        crate::traits::InvalidInt
                     })?;
                 Ok(Some(MessageGroup::new(entries)))
             }

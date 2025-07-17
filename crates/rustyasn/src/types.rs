@@ -1,7 +1,7 @@
 //! ASN.1 type definitions and FIX field mappings.
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use rasn::{AsnType, Decode, Encode};
+use rasn::{AsnType, Decode, Decoder, Encode};
 use rust_decimal::Decimal;
 use smartstring::{LazyCompact, SmartString};
 

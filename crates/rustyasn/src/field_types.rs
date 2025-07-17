@@ -4,8 +4,8 @@
 //! enabling seamless integration between ASN.1 encoding and the `RustyFix` ecosystem.
 
 use crate::error::{DecodeError, EncodeError};
-use rasn::{AsnType, Decode, Encode};
-use rustyfix::{Buffer, FieldType};
+use crate::traits::{Buffer, FieldType};
+use rasn::{AsnType, Decode, Decoder, Encode};
 use std::convert::TryFrom;
 
 /// Error type for ASN.1 field type operations.
@@ -86,12 +86,12 @@ impl<'a> FieldType<'a> for Asn1String {
         self.inner.len()
     }
 
-    fn deserialize(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         let s = std::str::from_utf8(data)?;
         Ok(Self::new(s.to_string()))
     }
 
-    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         // For lossy deserialization, use String::from_utf8_lossy
         let s = String::from_utf8_lossy(data);
         Ok(Self::new(s.to_string()))
@@ -158,7 +158,7 @@ impl<'a> FieldType<'a> for Asn1Integer {
         s.len()
     }
 
-    fn deserialize(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         let s = std::str::from_utf8(data)?;
         let value = s
             .parse::<i64>()
@@ -166,7 +166,7 @@ impl<'a> FieldType<'a> for Asn1Integer {
         Ok(Self::new(value))
     }
 
-    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         // For lossy parsing, try to parse as much as possible
         let mut result = 0i64;
         let mut sign = 1i64;
@@ -264,7 +264,7 @@ impl<'a> FieldType<'a> for Asn1UInteger {
         s.len()
     }
 
-    fn deserialize(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         let s = std::str::from_utf8(data)?;
         let value = s
             .parse::<u64>()
@@ -272,7 +272,7 @@ impl<'a> FieldType<'a> for Asn1UInteger {
         Ok(Self::new(value))
     }
 
-    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         // For lossy parsing, try to parse as much as possible
         let mut result = 0u64;
         let mut idx = 0;
@@ -343,7 +343,7 @@ impl<'a> FieldType<'a> for Asn1Boolean {
         1
     }
 
-    fn deserialize(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         match data {
             b"Y" | b"y" | b"1" | b"true" | b"TRUE" | b"True" => Ok(Self::new(true)),
             b"N" | b"n" | b"0" | b"false" | b"FALSE" | b"False" => Ok(Self::new(false)),
@@ -351,7 +351,7 @@ impl<'a> FieldType<'a> for Asn1Boolean {
         }
     }
 
-    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize_lossy(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         // For lossy parsing, be more liberal
         if data.is_empty() {
             return Ok(Self::new(false));
@@ -414,7 +414,7 @@ impl<'a> FieldType<'a> for Asn1Bytes {
         self.inner.len()
     }
 
-    fn deserialize(data: &'a [u8]) -> Result<Self, Self::Error> {
+    fn deserialize(data: &'a [u8]) -> Result<Self, <Self as FieldType<'a>>::Error> {
         Ok(Self::new(data.to_vec()))
     }
 }

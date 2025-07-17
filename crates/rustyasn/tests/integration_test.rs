@@ -1,7 +1,7 @@
 //! Integration tests for RustyASN encoding and decoding.
 
 use rustyasn::{Config, Decoder, Encoder, EncodingRule};
-use rustyfix::Dictionary;
+use rustyfix_dictionary::Dictionary;
 use std::sync::Arc;
 
 #[test]

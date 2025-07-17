@@ -4,12 +4,13 @@ use crate::{
     config::{Config, EncodingRule},
     error::{EncodeError, Error, Result},
     schema::Schema,
+    traits::{FieldMap, FieldType, GetConfig, SetField},
     types::{Field, FixMessage, ToFixFieldValue},
 };
 use bytes::BytesMut;
 use rasn::{ber::encode as ber_encode, der::encode as der_encode, oer::encode as oer_encode};
 use rustc_hash::FxHashSet;
-use rustyfix::{Dictionary, FieldMap, FieldType, GetConfig, SetField};
+use rustyfix_dictionary::Dictionary;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
@@ -240,7 +241,7 @@ impl Encoder {
 
             if let Some(raw_data) = msg.get_raw(tag) {
                 let value_str = String::from_utf8_lossy(raw_data);
-                handle.add_field(tag, value_str.to_string());
+                handle.add_field(tag, &value_str.to_string());
                 processed_tags.insert(tag);
             }
         }
@@ -262,7 +263,7 @@ impl Encoder {
 
                     if let Some(raw_data) = msg.get_raw(tag) {
                         let value_str = String::from_utf8_lossy(raw_data);
-                        handle.add_field(tag, value_str.to_string());
+                        handle.add_field(tag, &value_str.to_string());
                         processed_tags.insert(tag);
                     }
                 }
@@ -283,7 +284,7 @@ impl Encoder {
 
             if let Some(raw_data) = msg.get_raw(tag) {
                 let value_str = String::from_utf8_lossy(raw_data);
-                handle.add_field(tag, value_str.to_string());
+                handle.add_field(tag, &value_str.to_string());
             }
         }
     }
@@ -335,13 +336,13 @@ impl SetField<u32> for EncoderHandle<'_> {
         let value_str = String::from_utf8_lossy(&temp_buffer);
 
         // Add to the message using the existing add_field method
-        self.add_field(field, value_str.to_string());
+        self.add_field(field, &value_str.to_string());
     }
 }
 
 impl EncoderHandle<'_> {
     /// Adds a field to the message.
-    pub fn add_field(&mut self, tag: u32, value: impl ToFixFieldValue) -> &mut Self {
+    pub fn add_field(&mut self, tag: u32, value: &impl ToFixFieldValue) -> &mut Self {
         self.message.fields.push(Field {
             tag,
             value: value.to_fix_field_value(),
@@ -351,22 +352,23 @@ impl EncoderHandle<'_> {
 
     /// Adds a string field to the message.
     pub fn add_string(&mut self, tag: u32, value: impl Into<String>) -> &mut Self {
-        self.add_field(tag, value.into())
+        let val = value.into();
+        self.add_field(tag, &val)
     }
 
     /// Adds an integer field to the message.
     pub fn add_int(&mut self, tag: u32, value: i64) -> &mut Self {
-        self.add_field(tag, value)
+        self.add_field(tag, &value)
     }
 
     /// Adds an unsigned integer field to the message.
     pub fn add_uint(&mut self, tag: u32, value: u64) -> &mut Self {
-        self.add_field(tag, value)
+        self.add_field(tag, &value)
     }
 
     /// Adds a boolean field to the message.
     pub fn add_bool(&mut self, tag: u32, value: bool) -> &mut Self {
-        self.add_field(tag, value)
+        self.add_field(tag, &value)
     }
 
     /// Encodes the message and returns the encoded bytes.

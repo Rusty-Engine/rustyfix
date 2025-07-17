@@ -2,7 +2,7 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rustyasn::{Config, Decoder, Encoder, EncodingRule};
-use rustyfix::Dictionary;
+use rustyfix_dictionary::Dictionary;
 use std::hint::black_box;
 use std::sync::Arc;
 
